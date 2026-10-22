@@ -1,11 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { EventPlan, TaskStatus, TaskType, PlanningTask } from "@/lib/types/plan";
 import { SAMPLE_BIRTHDAY_PLAN } from "@/lib/storage/mock-data";
 import { calculateBudgetSummary } from "@/lib/planning/budget";
 import { selectTaskOption, transitionTaskStatus } from "@/lib/planning/task-state";
 import { applyConstraintChanges } from "@/lib/planning/change-impact";
+import {
+  savePlanLocally,
+  loadPlanLocally,
+  clearPlanLocally,
+} from "@/lib/storage/local-plans";
 
 import { LandingHero } from "@/components/landing/LandingHero";
 import { PlanHeader } from "@/components/workspace/PlanHeader";
@@ -38,6 +43,25 @@ export default function Home() {
   ]);
 
   const budgetSummary = calculateBudgetSummary(plan);
+
+  // 1. Safe Hydration from LocalStorage on initial client mount
+  useEffect(() => {
+    const saved = loadPlanLocally();
+    if (saved) {
+      setPlan(saved.plan);
+      if (saved.messages && saved.messages.length > 0) {
+        setMessages(saved.messages);
+      }
+      setHasStarted(true);
+    }
+  }, []);
+
+  // 2. Auto-persist changes to LocalStorage
+  useEffect(() => {
+    if (hasStarted) {
+      savePlanLocally(plan, messages);
+    }
+  }, [plan, messages, hasStarted]);
 
   // Calls the server-side /api/chat route handler
   const callChatApi = async (newMessages: ChatMessage[], currentPlan: EventPlan) => {
@@ -244,8 +268,10 @@ export default function Home() {
     });
   };
 
-  // Reset to landing
+  // Reset to landing and clear persisted storage
   const handleReset = () => {
+    clearPlanLocally();
+    setPlan(SAMPLE_BIRTHDAY_PLAN);
     setHasStarted(false);
     setActiveTab("workspace");
   };
@@ -275,6 +301,10 @@ export default function Home() {
 
           {hasStarted && (
             <div className="flex items-center gap-3">
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200/60 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Saved in browser
+              </span>
               <button
                 type="button"
                 onClick={handleReset}

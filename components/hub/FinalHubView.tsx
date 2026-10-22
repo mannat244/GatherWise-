@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
+  Download,
 } from "lucide-react";
 
 interface FinalHubViewProps {
@@ -108,6 +109,58 @@ ${plan.tasks
     }
   };
 
+  // Download Markdown summary
+  const handleDownloadMarkdown = () => {
+    const mdContent = `# GatherWise Event Plan: ${plan.title}
+Version: v${plan.version} | Generated: ${new Date().toLocaleDateString()}
+
+## Event Overview
+- **Event Type:** ${plan.eventType || "Gathering"}
+- **Date & Time:** ${plan.date || "TBD"} ${plan.time ? `@ ${plan.time}` : ""}
+- **Location:** ${plan.location || "TBD"}
+- **Guest Count:** ${plan.guestCount || "TBD"}
+- **Total Budget:** ${formatCurrency(budgetSummary.totalBudget, budgetSummary.currency)}
+- **Committed Spend:** ${formatCurrency(budgetSummary.committedSpend, budgetSummary.currency)}
+- **Estimated Spend:** ${formatCurrency(budgetSummary.estimatedSpend, budgetSummary.currency)}
+- **Remaining Spend:** ${formatCurrency(budgetSummary.remainingSpend, budgetSummary.currency)}
+
+## Confirmed Choices
+${
+  selectedOptions.length > 0
+    ? selectedOptions
+        .map(
+          (o) =>
+            `### ${o.name} (${o.category || "General"})
+- **Address:** ${o.location?.address || "N/A"}
+${o.location?.directionsUrl ? `- **Directions:** ${o.location.directionsUrl}\n` : ""}${o.sourceUrl ? `- **Source:** ${o.sourceUrl}\n` : ""}${o.bookingUrl ? `- **Booking/Official Site:** ${o.bookingUrl}\n` : ""}`
+        )
+        .join("\n")
+    : "No choices confirmed yet."
+}
+
+## Execution Checklist
+${plan.tasks
+  .map(
+    (t) =>
+      `- [${t.status === "completed" ? "X" : " "}] **${t.title}** (${t.status})${t.dueDate ? ` - Due: ${t.dueDate}` : ""}`
+  )
+  .join("\n")}
+
+## Invitation Text
+\`\`\`
+${invitationText}
+\`\`\`
+`;
+
+    const blob = new Blob([mdContent], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${plan.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_GatherWise_Plan.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const selectedOptions = plan.tasks.flatMap((t) =>
     t.options.filter((o) => o.id === t.selectedOptionId)
   );
@@ -150,6 +203,15 @@ ${plan.tasks
             >
               {copiedPlan ? <Check className="h-4 w-4 text-emerald-600" /> : <FileText className="h-4 w-4" />}
               <span>{copiedPlan ? "Plan Copied!" : "Copy Plan"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadMarkdown}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 shadow-xs"
+              title="Download entire event plan as a portable Markdown file"
+            >
+              <Download className="h-4 w-4 text-stone-600" />
+              <span>Download (.md)</span>
             </button>
             <button
               type="button"
