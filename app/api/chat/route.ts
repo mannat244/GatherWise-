@@ -12,6 +12,11 @@ import { buildSystemInstruction } from "@/lib/gemini/prompts";
 import { calculateBudgetSummary } from "@/lib/planning/budget";
 import { applyConstraintChanges } from "@/lib/planning/change-impact";
 import { selectTaskOption } from "@/lib/planning/task-state";
+import {
+  extractGroundingMetadata,
+  normalizeGroundedOption,
+  GroundingExtraction,
+} from "@/lib/gemini/grounding";
 
 const ChatRequestSchema = z.object({
   messages: z.array(
@@ -50,6 +55,11 @@ export async function POST(req: NextRequest) {
     const gemini = getGeminiClient();
 
     let proposal: AgentProposal;
+    let groundingData: GroundingExtraction = {
+      isGrounded: false,
+      searchQueries: [],
+      sources: [],
+    };
 
     if (!gemini) {
       // Graceful Offline Fallback: Operates when GEMINI_API_KEY is not configured
@@ -68,8 +78,11 @@ export async function POST(req: NextRequest) {
           config: {
             systemInstruction,
             temperature: 0.2,
+            tools: [{ googleSearch: {} }],
           },
         });
+
+        groundingData = extractGroundingMetadata(response);
 
         const rawText = response.text || "";
         const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || [null, rawText];
@@ -80,6 +93,25 @@ export async function POST(req: NextRequest) {
 
         if (proposalResult.success) {
           proposal = proposalResult.data;
+
+          // Normalize any proposed options with grounding URLs and maps links
+          const topSourceUrl = groundingData.sources[0]?.url;
+          proposal.actions = proposal.actions.map((act) => {
+            if (act.type === "propose_options") {
+              const normalizedOptions = act.options.map((opt) =>
+                normalizeGroundedOption(opt, currentPlan.location, topSourceUrl)
+              );
+              return { ...act, options: normalizedOptions };
+            }
+            return act;
+          });
+
+          if (groundingData.sources.length > 0) {
+            proposal.sourceNotes = [
+              ...proposal.sourceNotes,
+              ...groundingData.sources.map((s) => `Source: ${s.title} (${s.url})`),
+            ];
+          }
         } else {
           // Fallback if model output deviated from schema
           proposal = {
@@ -113,6 +145,9 @@ export async function POST(req: NextRequest) {
       updatedPlan,
       budgetSummary,
       sourceNotes: proposal.sourceNotes,
+      isGrounded: groundingData.isGrounded,
+      groundingSources: groundingData.sources,
+      webSearchQueries: groundingData.searchQueries,
     });
   } catch (error: any) {
     console.error("Unhandled error in /api/chat:", error);
