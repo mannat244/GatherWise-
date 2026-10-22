@@ -13,7 +13,7 @@ import { BudgetBar } from "@/components/workspace/BudgetBar";
 import { TaskChecklist } from "@/components/tasks/TaskChecklist";
 import { ChatPanel, ChatMessage } from "@/components/chat/ChatPanel";
 import { FinalHubView } from "@/components/hub/FinalHubView";
-import { Sparkles, RotateCcw, PartyPopper } from "lucide-react";
+import { RotateCcw, PartyPopper } from "lucide-react";
 
 export default function Home() {
   const [hasStarted, setHasStarted] = useState(false);
@@ -26,7 +26,7 @@ export default function Home() {
       id: "msg-1",
       role: "assistant",
       content:
-        "Welcome to GatherWise! I've organized your birthday party brief into an actionable checklist and budget. Next, let's explore venue options or finalize your catering.",
+        "Welcome to GatherWise! I've converted your event brief into an editable checklist and budget. Ask for venue options, update your constraints, or explore next steps.",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       suggestedAnswers: [
         "Show me cafe options in Koramangala",
@@ -39,10 +39,69 @@ export default function Home() {
 
   const budgetSummary = calculateBudgetSummary(plan);
 
+  // Calls the server-side /api/chat route handler
+  const callChatApi = async (newMessages: ChatMessage[], currentPlan: EventPlan) => {
+    setIsLoading(true);
+
+    try {
+      const clientTimezone =
+        typeof Intl !== "undefined"
+          ? Intl.DateTimeFormat().resolvedOptions().timeZone
+          : "Asia/Kolkata";
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
+          currentPlan,
+          clientContext: {
+            timezone: clientTimezone,
+            dateIso: new Date().toISOString(),
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (data.updatedPlan) {
+        setPlan(data.updatedPlan);
+      }
+
+      const assistantMsg: ChatMessage = {
+        id: `asst-${Date.now()}`,
+        role: "assistant",
+        content: data.assistantMessage || "Plan updated successfully.",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        followUpQuestion: data.followUpQuestion,
+        suggestedAnswers: data.suggestedAnswers || [],
+        isGrounded: (data.sourceNotes && data.sourceNotes.length > 0) || false,
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (error) {
+      console.error("Chat API call error:", error);
+      const fallbackMsg: ChatMessage = {
+        id: `asst-err-${Date.now()}`,
+        role: "assistant",
+        content:
+          "I experienced a connection issue reaching the planning service. Your current plan and tasks are safe.",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        suggestedAnswers: ["Retry message", "View Final Event Hub"],
+      };
+      setMessages((prev) => [...prev, fallbackMsg]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Transition from landing prompt to workspace
   const handleStartWithPrompt = (promptText: string) => {
-    // Generate initial plan from prompt text (mock extraction for M2)
-    const newPlan: EventPlan = {
+    const initialPlan: EventPlan = {
       ...SAMPLE_BIRTHDAY_PLAN,
       id: `plan-${Date.now()}`,
       title: promptText.length > 40 ? `${promptText.slice(0, 37)}...` : promptText,
@@ -50,29 +109,19 @@ export default function Home() {
       updatedAt: new Date().toISOString(),
     };
 
-    setPlan(newPlan);
-    setMessages([
-      {
-        id: `user-${Date.now()}`,
-        role: "user",
-        content: promptText,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-      {
-        id: `asst-${Date.now()}`,
-        role: "assistant",
-        content:
-          "I've initialized your event workspace! I extracted your initial constraints and drafted a checklist with grounded venue options and a deterministic budget.",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        suggestedAnswers: [
-          "Check venue options",
-          "Change guest count",
-          "What is my contingency buffer?",
-        ],
-        isGrounded: true,
-      },
-    ]);
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: promptText,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    const updatedMessages = [userMsg];
+    setPlan(initialPlan);
+    setMessages(updatedMessages);
     setHasStarted(true);
+
+    callChatApi(updatedMessages, initialPlan);
   };
 
   // Instant Demo Load for Evaluators
@@ -81,7 +130,7 @@ export default function Home() {
     setHasStarted(true);
   };
 
-  // Chat message send handler (interactive mock for M2; wires to Gemini in M3)
+  // Chat message send handler
   const handleSendMessage = (text: string) => {
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -90,82 +139,10 @@ export default function Home() {
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
-    setIsLoading(true);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
 
-    // Check if user is asking to change constraints (interactive demonstration)
-    setTimeout(() => {
-      setIsLoading(false);
-      const lower = text.toLowerCase();
-
-      if (lower.includes("guest") || lower.includes("people") || lower.includes("15")) {
-        const { updatedPlan, impact } = applyConstraintChanges(plan, { guestCount: 15 });
-        setPlan(updatedPlan);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `asst-${Date.now()}`,
-            role: "assistant",
-            content: `Understood! I've updated the guest count to 15. ${impact.explanations.join(". ")}. Your per-person estimates have been recalculated, and all completed tasks were preserved.`,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            suggestedAnswers: ["Select The Living Room Cafe", "View Final Event Hub"],
-          },
-        ]);
-      } else if (lower.includes("budget") || lower.includes("4,000") || lower.includes("4000")) {
-        const { updatedPlan, impact } = applyConstraintChanges(plan, { budgetAmount: 4000 });
-        setPlan(updatedPlan);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `asst-${Date.now()}`,
-            role: "assistant",
-            content: `I've adjusted your total budget to ₹4,000. ${impact.warnings.join(" ") || "Your plan remains within budget."}`,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            suggestedAnswers: ["How much is remaining?", "View Final Event Hub"],
-          },
-        ]);
-      } else if (lower.includes("cafe") || lower.includes("venue")) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `asst-${Date.now()}`,
-            role: "assistant",
-            content:
-              "I found grounded venue listings for Koramangala! Take a look at 'The Living Room Cafe' (Garden patio, board games) or 'Dialogues Board Game Cafe' in your task checklist.",
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            suggestedAnswers: ["Select The Living Room Cafe", "View Final Event Hub"],
-            isGrounded: true,
-          },
-        ]);
-      } else if (lower.includes("final") || lower.includes("hub") || lower.includes("done")) {
-        setActiveTab("hub");
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `asst-${Date.now()}`,
-            role: "assistant",
-            content:
-              "I've switched you over to the Final Event Hub! Here you can preview your personalized invitation, share it with guests, or print your itinerary to PDF.",
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          },
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `asst-${Date.now()}`,
-            role: "assistant",
-            content: `Noted: "${text}". I have logged your preferences. You can continue updating the checklist or switch to the Final Event Hub.`,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            suggestedAnswers: [
-              "Show me cafe options in Koramangala",
-              "Change guest count to 15",
-              "View Final Event Hub",
-            ],
-          },
-        ]);
-      }
-    }, 600);
+    callChatApi(nextMessages, plan);
   };
 
   // Toggle task completion
