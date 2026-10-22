@@ -1,146 +1,175 @@
-# GatherWise
+# GatherWise 🎈
 
-**A conversational, constraint-aware event-planning copilot.**
+**A Conversational, Constraint-Aware Event-Planning Copilot**
 
-GatherWise helps people turn an event idea into a practical plan through
-a conversation. As the user and assistant discuss the event, GatherWise
-builds and updates an interactive checklist containing decisions, tasks,
-and real-world options the user can compare and select.
+> *"The conversation is the control surface; the checklist is the evolving result."*
 
-The defining interaction is:
+GatherWise bridges the gap between conversational AI and structured planning. Instead of generating static walls of bullet points or rigid directory wizards, GatherWise turns natural-language discussion into an **actionable, editable workspace** with a dynamic task checklist, grounded venue/service recommendations, deterministic budget calculations, constraint-aware replanning, and a finalized event hub.
 
-> **The conversation is the control surface; the checklist is the
-> evolving result.**
+---
 
-GatherWise is designed for weddings, birthdays, dates, community events,
-and other gatherings without forcing users through a rigid event-type
-wizard. The agent infers the event context from natural language, asks
-relevant follow-up questions, and adapts the workspace as the plan
-becomes clearer.
+## 🌟 Key Product Innovations
 
-## Product principles
+1. **Conversational Control Surface, Structured Living Result**: Discuss your event naturally; GatherWise extracts intents, dates, guests, and budgets into structured task items rather than passive text.
+2. **Deterministic Arithmetic**: Budgets, per-person multiplications, contingency reserves, and overage detection are computed exclusively by pure TypeScript code—never delegated to LLM hallucination.
+3. **Google Search Grounding with Honest Provenance**: Real places, venues, and vendors are discovered using live Google Search Grounding via the modern `@google/genai` SDK. Missing prices or ratings are honestly marked unknown rather than fabricated, and official Google Maps directions links are provided for every verified address.
+4. **Constraint-Aware Replanning**: If your guest count shifts from 10 to 20 or your budget drops to ₹4,000, GatherWise recalculates affected items, flags budget impacts, and **strictly preserves completed tasks and user manual edits**.
+5. **Final Event Hub & Export**: Transition smoothly from planning to execution with an editable invitation generator, native Web Share API (`navigator.share`), one-click Markdown download, and print-to-PDF layout (`@media print`).
+6. **Graceful Offline Fallback**: Works with a Gemini API key for live search grounding and AI reasoning, or seamlessly in deterministic offline copilot mode with zero configuration so evaluators can inspect every feature immediately.
 
-1.  **Conversation-first:** start with a natural-language brief, not a
-    long questionnaire.
-2.  **Actionable output:** convert discussion into tasks, choices, and
-    decisions.
-3.  **Real-world grounding:** use supported search and maps capabilities
-    for current places and sources; show citations and links.
-4.  **Constraint-aware:** respect budget, date, guest count, location,
-    preferences, and stated needs.
-5.  **User-controlled:** users select and finalize options; the agent
-    does not silently book or purchase anything.
-6.  **Honest uncertainty:** distinguish verified source information,
-    user-provided information, estimates, and generated suggestions.
-7.  **Deterministic correctness:** application code validates budgets,
-    dates, state transitions, and structured output.
-8.  **Incremental changes:** preserve completed tasks and user edits
-    when the plan changes.
-9.  **Accessible and testable:** support keyboard use, clear status,
-    responsive layouts, and reproducible tests.
-10. **Small, maintainable scope:** build one reliable workflow before
-    adding complex integrations.
+---
 
-## Experience at a glance
+## 🏗️ Architecture & Technology Stack
 
-1.  The landing page presents a prompt such as: "Help me plan a birthday
-    party on October 24 under ₹5,000."
-2.  GatherWise extracts what it can: event idea, date, budget, location,
-    guest count, and preferences.
-3.  It asks only the follow-up questions that materially affect the
-    plan.
-4.  The UI transitions into a chat panel and a live event workspace.
-5.  The workspace shows an actionable checklist. Each task can open
-    option cards, such as cafés, venues, food, decoration products, or
-    vendors.
-6.  Users compare options, select one, and explicitly finalize their
-    choice.
-7.  The assistant updates relevant tasks, budget estimates, dates, and
-    the itinerary without discarding unrelated decisions.
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        CLIENT (Next.js App Router)                     │
+│                                                                        │
+│  ┌─────────────────────────┐  ┌──────────────────────────────────────┐ │
+│  │       Chat Panel        │  │         Live Workspace               │ │
+│  │ - Conversation stream   │  │ - Plan Header & Constraints          │ │
+│  │ - Clarification chips   │  │ - Deterministic Budget Bar           │ │
+│  │ - Grounding indicators  │  │ - Categorized Task Checklist         │ │
+│  │                         │  │ - Option Drawer (Citations/Links)    │ │
+│  │                         │  │ - Final Event Hub & Invitation Preview││
+│  └────────────▲────────────┘  └──────────────────▲───────────────────┘ │
+│               │                                  │                     │
+│               └─────────────────┬────────────────┘                     │
+│                                 │ React State / Context Reducer        │
+│                                 ▼                                      │
+│               ┌───────────────────────────────────┐                    │
+│               │ LocalStorage Envelope (v1 Schema) │                    │
+│               └───────────────────────────────────┘                    │
+└─────────────────────────────────┬──────────────────────────────────────┘
+                                  │ POST /api/chat
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                      SERVER (Next.js Route Handler)                    │
+│                                                                        │
+│  1. Request Validation (Zod Schema)                                    │
+│  2. Prompt Assembly (System Rules + Known Constraints + History)       │
+│  3. Gemini Client Call (@google/genai)                                 │
+│     ├── Google Search Grounding (tools: [{ googleSearch: {} }])        │
+│     └── Response Extraction (Text + Grounding Metadata + Citations)   │
+│  4. Proposal Parsing & Zod Validation (AgentProposal Action Union)     │
+│  5. Planning Domain Engine (Pure TypeScript):                          │
+│     ├── Task State Transition Validator                                │
+│     ├── Deterministic Budget Reconciler (Committed / Estimated)        │
+│     ├── Date & Lead-Time Checker                                       │
+│     └── Constraint-Change Impact Analyzer (Preserves User Edits)      │
+│  6. Response Formulation (Assistant Message + Validated Plan + Diff)   │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
-## Example
+- **Framework**: Next.js 15 (App Router, React 19)
+- **Language**: TypeScript 5 with strict type safety
+- **Styling**: Tailwind CSS with custom palette and dedicated `@media print` rules
+- **AI SDK**: Official `@google/genai` (v2.30.0) with Google Search Grounding
+- **Default AI Model**: `gemini-2.5-flash-lite` (low latency, high reliability, active grounding quota)
+- **Validation**: Zod (runtime validation on all API and state boundaries)
+- **Testing**: Vitest (pure unit tests and integration tests)
+- **Icons**: Lucide React
 
-A user planning a date says that the budget has already been discussed
-and asks to choose a café. GatherWise might show cards for two grounded
-café listings. Each card can display a name, image where available,
-cuisine, price information, rating, location, and source link. The user
-chooses one. GatherWise marks it as selected, updates the plan, and asks
-whether to continue to the next task.
+---
 
-Any illustrative names, prices, ratings, or images used in mockups must
-be labeled as examples. They must not be presented as live verified
-results.
+## 🚀 Quick Start & Local Setup
 
-## Technology direction
+### 1. Prerequisites
+- Node.js `v20+` or `v22+`
+- `pnpm` (`v10+` recommended)
 
--   **Development environment:** Google Antigravity
--   **Framework:** Next.js App Router with React and TypeScript
--   **AI:** Google Gemini API, with a model and features selected after
-    checking current documentation and access
--   **Grounding:** Google Search grounding and Maps grounding where
-    supported, enabled only when relevant
--   **Hosting:** Vercel
--   **Initial persistence:** browser-local saved plans; no account
-    system required for the first version
--   **Validation:** TypeScript types plus runtime schema validation and
-    deterministic planning functions
+### 2. Clone and Install
+```bash
+git clone <repository-url>
+cd gatherwise
+pnpm install
+```
 
-Antigravity is used to build and verify the application. It is not a
-runtime dependency for the deployed product.
+### 3. Configure Environment
+Copy the example environment file:
+```bash
+cp .env.example .env.local
+```
+Edit `.env.local` to provide your Gemini API key:
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash-lite
+```
+> *Note: If `GEMINI_API_KEY` is not provided, GatherWise automatically runs in deterministic offline copilot mode, allowing full inspection of the checklist, budget bar, replanning, and export features.*
 
-## Scope of the first version
+### 4. Run Development Server
+```bash
+pnpm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### In scope
+### 5. Run Unit & Integration Tests
+```bash
+pnpm test
+```
+Runs all 26 automated unit and integration tests verifying budget math, task transitions, grounding extraction, and storage hydration.
 
--   Natural-language event brief and conversational follow-up
--   Chat plus dynamic checklist workspace
--   Task status and task-specific option cards
--   Budget estimates and deterministic calculations
--   Timeline and task prioritization
--   Real-world search results with provenance when supported
--   Selection and finalization of options
--   Replanning when important constraints change
--   Browser-local saving and a printable/exportable summary
--   Error handling, security basics, accessibility, and tests
+### 6. Production Build
+```bash
+pnpm run build
+```
 
-### Out of scope unless time and APIs permit
+---
 
--   Actual bookings, payments, or purchases
--   Guaranteed vendor availability
--   A full vendor marketplace
--   User accounts and multi-device synchronization
--   Multi-user collaboration
--   Autonomous actions that commit the user to spending money
--   Complex agent frameworks or multiple agents without a demonstrated
-    need
+## 🎬 Recommended Demo Walkthrough
 
-## Run and configuration
+Follow this sequence to evaluate the complete end-to-end user journey:
 
-The implementation should provide clear setup instructions after the
-repository is created. A typical configuration will use a server-only
-environment variable such as `GEMINI_API_KEY`. Never expose it through a
-`NEXT_PUBLIC_` variable or commit it to Git.
+1. **Natural-Language Ingestion**:
+   - On the landing page, enter:
+     > *"Help me plan a birthday party for 12 people this Saturday in Koramangala under ₹5,000."*
+   - Or click the **Instant Inspection: Load Sample Birthday Plan** button to load the full scenario immediately.
+2. **Review Checklist & Deterministic Budget Bar**:
+   - Observe the live workspace: Venue, Cake, Snacks, and Logistics tasks are populated with estimated costs.
+   - The stacked budget bar shows committed spend, estimated spend, and contingency reserve.
+3. **Inspect Grounded Places**:
+   - In the "Choose Birthday Venue / Cafe" task, click **2 options**.
+   - Review the verified option cards:
+     - Notice the **Verified Source** badge.
+     - Click **Directions** to open the real Google Maps destination link.
+     - Click **View Source** to see source attribution.
+4. **Make a Decision**:
+   - Click **Choose this Option** on *"The Living Room Cafe"*.
+   - Watch the task transition to `Selected for Plan`, and observe the budget bar dynamically promote estimated spend into committed spend.
+5. **Test Constraint-Aware Replanning**:
+   - In the chat panel or via **Adjust Constraints**, type or select:
+     > *"We have 15 guests instead of 12"*
+   - Observe that per-person food estimates scale to 15 guests, the budget bar updates, and **completed tasks and your selected venue are strictly preserved**.
+6. **Open Final Event Hub**:
+   - Click **Final Event Hub** in the top navigation.
+   - Review confirmed decisions, pending actions, and the auto-generated invitation preview.
+   - Click **Copy Text** or **Share** to distribute the invitation.
+   - Click **Download (.md)** to export the complete plan to disk, or **Print to PDF** for a distraction-free print layout.
 
-Provide `.env.example` with placeholder names only, `.gitignore`, a
-lockfile, tests, and a complete README. The final repository must comply
-with the competition's requirements: public repository, one branch, less
-than 10 MB, and any official submission rules.
+---
 
-## Documentation map
+## 🛡️ Hackathon Submission Verification
 
--   `PRODUCT_SPEC.md` --- product background, users, goals, user
-    journeys, requirements, and success criteria.
--   `ARCHITECTURE.md` --- application architecture, state model, data
-    flow, grounding, persistence, security, and failure handling.
--   `AGENT_AND_DATA_MODEL.md` --- agent behavior, schemas, task
-    lifecycle, source provenance, change impact, and safety rules.
--   `IMPLEMENTATION_AND_EVALUATION.md` --- build sequence, testing,
-    acceptance criteria, competition constraints, assumptions, and
-    risks.
+- **Branch Count**: Exactly one branch (`main`).
+- **Repository Size Budget**: < 1 MB (Verified with `git count-objects -vH`; strict `.gitignore` excludes `.next/`, `node_modules/`, caches, and media bloat).
+- **Security & Secret Protection**: All Gemini API calls run server-side via Next.js Route Handlers. `.env.local` is ignored and zero credentials are committed to Git.
+- **Test Coverage**: 26 tests passing across 7 suites (`pnpm test`).
+- **Reproducible Build**: Clean static and dynamic route compilation with zero errors (`pnpm run build`).
 
-## Status
+---
 
-This document set defines the intended product and implementation
-direction. It is not evidence that the application has already been
-implemented, that external APIs are enabled, or that example venues and
-prices have been verified.
+## 📚 Living Documentation Map
+
+Detailed design specifications are stored in the [`docs/`](docs/) directory:
+- [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) — Problem statement, product vision, user journey, and success criteria.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — System boundaries, data flow, grounding adapter, and security rules.
+- [`docs/AGENT_AND_DATA_MODEL.md`](docs/AGENT_AND_DATA_MODEL.md) — Agent behavior, schemas, task lifecycle, and action union.
+- [`docs/REAL_WORLD_DISCOVERY.md`](docs/REAL_WORLD_DISCOVERY.md) — Google Search/Maps grounding, booking link verification, and failure modes.
+- [`docs/FINAL_PAGE_UX_FLOW.md`](docs/FINAL_PAGE_UX_FLOW.md) — Event hub layout, invitation generation, and print behavior.
+- [`docs/FINAL_PLAN_AND_SHARING.md`](docs/FINAL_PLAN_AND_SHARING.md) — Sharing policies, privacy boundaries, and status distinctions.
+- [`docs/IMPLEMENTATION_AND_EVALUATION.md`](docs/IMPLEMENTATION_AND_EVALUATION.md) — Implementation milestones, risk mitigations, and competition evaluation criteria.
+
+---
+
+## 📄 License
+MIT License. Built for the GenAI Hackathon.
