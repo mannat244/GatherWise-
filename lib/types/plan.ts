@@ -288,6 +288,7 @@ export const AgentProposalSchema = z.object({
   assistantMessage: z.string(),
   intent: z.enum(["clarify", "plan", "search", "compare", "select", "edit", "explain"]),
   followUpQuestion: z.string().optional(),
+  suggestedAnswers: z.array(z.string()).optional(),
   actions: z.array(AgentActionSchema).default([]),
   sourceNotes: z.array(z.string()).default([]),
 });

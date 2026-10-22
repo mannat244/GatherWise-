@@ -18,6 +18,7 @@ import {
   normalizeGroundedOption,
   GroundingExtraction,
 } from "@/lib/gemini/grounding";
+import { parseModelResponseIntelligently } from "@/lib/gemini/parser";
 
 const ChatRequestSchema = z.object({
   messages: z.array(
@@ -86,41 +87,25 @@ export async function POST(req: NextRequest) {
         groundingData = extractGroundingMetadata(response);
 
         const rawText = response.text || "";
-        const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || [null, rawText];
-        const jsonString = (jsonMatch[1] || rawText).trim();
+        proposal = parseModelResponseIntelligently(rawText, currentPlan, groundingData);
 
-        const parsedJson = JSON.parse(jsonString);
-        const proposalResult = AgentProposalSchema.safeParse(parsedJson);
-
-        if (proposalResult.success) {
-          proposal = proposalResult.data;
-
-          // Normalize any proposed options with grounding URLs and maps links
-          const topSourceUrl = groundingData.sources[0]?.url;
-          proposal.actions = proposal.actions.map((act) => {
-            if (act.type === "propose_options") {
-              const normalizedOptions = act.options.map((opt) =>
-                normalizeGroundedOption(opt, currentPlan.location, topSourceUrl)
-              );
-              return { ...act, options: normalizedOptions };
-            }
-            return act;
-          });
-
-          if (groundingData.sources.length > 0) {
-            proposal.sourceNotes = [
-              ...proposal.sourceNotes,
-              ...groundingData.sources.map((s) => `Source: ${s.title} (${s.url})`),
-            ];
+        // Normalize any proposed options with grounding URLs and maps links
+        const topSourceUrl = groundingData.sources[0]?.url;
+        proposal.actions = proposal.actions.map((act) => {
+          if (act.type === "propose_options") {
+            const normalizedOptions = act.options.map((opt) =>
+              normalizeGroundedOption(opt, currentPlan.location, topSourceUrl)
+            );
+            return { ...act, options: normalizedOptions };
           }
-        } else {
-          // Fallback if model output deviated from schema
-          proposal = {
-            assistantMessage: parsedJson.assistantMessage || rawText || "Plan updated.",
-            intent: "plan",
-            actions: [],
-            sourceNotes: ["Model response schema validation had warnings; state protected."],
-          };
+          return act;
+        });
+
+        if (groundingData.sources.length > 0) {
+          proposal.sourceNotes = [
+            ...proposal.sourceNotes,
+            ...groundingData.sources.map((s) => `Source: ${s.title} (${s.url})`),
+          ];
         }
       } catch (geminiError: any) {
         console.error("Gemini API call failed:", geminiError);
@@ -128,6 +113,7 @@ export async function POST(req: NextRequest) {
           assistantMessage:
             "I experienced a temporary connection issue reaching the Gemini API. Your current plan and tasks are preserved.",
           intent: "explain",
+          suggestedAnswers: [],
           actions: [],
           sourceNotes: ["AI service unreachable; local state preserved."],
         };
