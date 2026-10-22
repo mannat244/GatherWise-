@@ -160,8 +160,10 @@ export function TaskChecklist({
             >
               <option value="venue">Venue</option>
               <option value="food">Food & Drinks</option>
+              <option value="travel">Travel & Transit</option>
+              <option value="activity">Activity & Games</option>
+              <option value="product">Product / Cake</option>
               <option value="decoration">Decoration</option>
-              <option value="activity">Activity</option>
               <option value="vendor">Vendor</option>
               <option value="logistics">Logistics</option>
               <option value="general">General</option>
@@ -193,14 +195,42 @@ export function TaskChecklist({
           </div>
         </form>
       ) : (
-        <button
-          type="button"
-          onClick={() => setIsAdding(true)}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-stone-300 py-2.5 text-xs font-medium text-stone-600 hover:border-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add Custom Task</span>
-        </button>
+        <div className="space-y-2">
+          {/* Quick-add task suggestion chips */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-stone-500">Quick additions:</span>
+            <button
+              type="button"
+              onClick={() => onAddTask({ title: "Order Birthday Cake", type: "product", estimatedCost: 600 })}
+              className="rounded-lg border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50 hover:border-stone-300 transition-colors"
+            >
+              + Birthday Cake
+            </button>
+            <button
+              type="button"
+              onClick={() => onAddTask({ title: "Travel: Commute to Venue", type: "travel", estimatedCost: 500 })}
+              className="rounded-lg border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50 hover:border-stone-300 transition-colors"
+            >
+              + Travel & Ride
+            </button>
+            <button
+              type="button"
+              onClick={() => onAddTask({ title: "Activity: Bowling & Entertainment", type: "activity", estimatedCost: 2000 })}
+              className="rounded-lg border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-stone-700 hover:bg-stone-50 hover:border-stone-300 transition-colors"
+            >
+              + Bowling & Games
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsAdding(true)}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-stone-300 py-2.5 text-xs font-medium text-stone-600 hover:border-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add Custom Task</span>
+          </button>
+        </div>
       )}
     </div>
   );

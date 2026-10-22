@@ -21,6 +21,7 @@ import {
   Plane,
   Home,
   Clock,
+  Navigation,
 } from "lucide-react";
 
 interface TaskCardProps {
@@ -38,7 +39,7 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
   product: ShoppingBag,
   vendor: Briefcase,
   activity: Activity,
-  travel: Plane,
+  travel: Navigation,
   accommodation: Home,
   logistics: Clock,
   general: Tag,

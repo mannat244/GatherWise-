@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   BadgeCheck,
   Compass,
+  Navigation,
 } from "lucide-react";
 
 interface OptionCardProps {
@@ -55,11 +56,18 @@ export function OptionCard({
         <div className="flex items-start justify-between gap-2">
           <div>
             <h4 className="text-base font-semibold text-stone-900">{option.name}</h4>
-            {option.category && (
-              <span className="text-xs uppercase tracking-wider text-stone-500 font-medium">
-                {option.category}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {option.category === "travel" ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                  <Navigation className="h-3 w-3" />
+                  Transit / Commute
+                </span>
+              ) : option.category ? (
+                <span className="text-xs uppercase tracking-wider text-stone-500 font-medium">
+                  {option.category}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           {/* Provenance Badge */}

@@ -208,39 +208,58 @@ function applyProposalActions(
         ? current.tasks.findIndex((t) => t.id === action.taskId)
         : -1;
 
-      // 2. If not matched, try matching by taskType (e.g. "venue", "food")
+      // 2. If not matched, try matching by taskType (e.g. "travel", "activity", "venue", "food")
       const targetType = action.taskType || (action.taskId ? (action.taskId.toLowerCase() as TaskType) : undefined);
       if (taskIndex < 0 && targetType) {
-        taskIndex = current.tasks.findIndex((t) => t.type === targetType);
-      }
-
-      // 3. If still not matched, check if an option has a category or title match
-      if (taskIndex < 0) {
-        const optionCategory = action.options[0]?.category?.toLowerCase();
-        if (optionCategory) {
-          taskIndex = current.tasks.findIndex((t) => t.type === optionCategory);
+        // Prefer an open task without an already selected/finalized option
+        taskIndex = current.tasks.findIndex(
+          (t) => t.type === targetType && t.status !== "completed" && !t.selectedOptionId
+        );
+        // If not found, check if any task of this type exists
+        if (taskIndex < 0) {
+          taskIndex = current.tasks.findIndex((t) => t.type === targetType);
         }
       }
 
-      // 4. If still not matched, check by keywords in title ("venue", "cafe", "food", "place")
+      // 3. If still not matched, check if an option has a category match
       if (taskIndex < 0) {
+        const optionCategory = action.options[0]?.category?.toLowerCase();
+        if (optionCategory) {
+          taskIndex = current.tasks.findIndex(
+            (t) => t.type === optionCategory && t.status !== "completed" && !t.selectedOptionId
+          );
+          if (taskIndex < 0) {
+            taskIndex = current.tasks.findIndex((t) => t.type === optionCategory);
+          }
+        }
+      }
+
+      // 4. If still not matched, check by keywords in title ("venue", "cafe", "food", "travel", "bowling")
+      if (taskIndex < 0 && targetType) {
         taskIndex = current.tasks.findIndex((t) =>
-          /venue|cafe|restaurant|place|food|dinner|lunch/i.test(t.title)
+          new RegExp(targetType, "i").test(t.title)
         );
       }
 
       // 5. If NO matching task exists in the plan, AUTO-CREATE it so options are never dropped!
       if (taskIndex < 0) {
         const createdType: TaskType = (targetType as TaskType) || "venue";
+        const titleMap: Record<string, string> = {
+          travel: "Travel & Commute to Venue",
+          activity: "Activity: Bowling & Entertainment",
+          food: "Order Food & Snacks",
+          product: "Birthday Cake & Treats",
+          venue: "Choose Venue / Cafe",
+        };
         const autoTask: PlanningTask = {
           id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          title: createdType === "food" ? "Order Food & Snacks" : "Choose Venue / Cafe",
+          title: titleMap[createdType] || "Explore Options",
           description: "Explore grounded recommendations and select an option.",
           type: createdType,
           status: "options_available",
           priority: "high",
           currency: current.constraints.currency || "INR",
-          costBasis: "per_event",
+          costBasis: createdType === "travel" ? "per_event" : "per_person",
           options: action.options as any,
           dependsOn: [],
           userEdited: false,
@@ -249,13 +268,25 @@ function applyProposalActions(
         };
         current.tasks = [autoTask, ...current.tasks];
       } else {
+        const existingTask = current.tasks[taskIndex];
+        // CRITICAL FIX: If existingTask already has a selectedOptionId, NEVER discard that option!
+        const existingSelectedOption = existingTask.selectedOptionId
+          ? existingTask.options.find((o) => o.id === existingTask.selectedOptionId)
+          : undefined;
+
+        let finalOptions = action.options as any[];
+        if (existingSelectedOption && !finalOptions.some((o) => o.id === existingSelectedOption.id)) {
+          finalOptions = [existingSelectedOption, ...finalOptions];
+        }
+
         current.tasks[taskIndex] = {
-          ...current.tasks[taskIndex],
-          options: action.options as any,
-          status:
-            current.tasks[taskIndex].status === "todo" || current.tasks[taskIndex].status === "in_progress"
-              ? "options_available"
-              : current.tasks[taskIndex].status,
+          ...existingTask,
+          options: finalOptions,
+          status: existingTask.selectedOptionId
+            ? existingTask.status
+            : existingTask.status === "todo" || existingTask.status === "in_progress"
+            ? "options_available"
+            : existingTask.status,
           lastUpdatedAt: new Date().toISOString(),
         };
       }
@@ -290,6 +321,7 @@ function generateOfflineProposal(userText: string, plan: EventPlan): AgentPropos
     return {
       assistantMessage: "Understood! I have removed the wheelchair accessibility requirement from your plan.",
       intent: "edit",
+      suggestedAnswers: ["Show remaining tasks", "View budget"],
       actions: [
         {
           type: "propose_constraint_change",
@@ -297,6 +329,207 @@ function generateOfflineProposal(userText: string, plan: EventPlan): AgentPropos
         },
       ],
       sourceNotes: ["Accessibility requirement cleared."],
+    };
+  }
+
+  // 2. Cost & Finalized Decision Inquiry
+  if (lower.includes("cost") || lower.includes("how much") || lower.includes("finalised") || lower.includes("forget") || (lower.includes("budget") && (lower.includes("what") || lower.includes("remaining")))) {
+    const summary = calculateBudgetSummary(plan);
+    const selectedTask = plan.tasks.find((t) => t.selectedOptionId);
+    const selectedOpt = selectedTask?.options.find((o) => o.id === selectedTask?.selectedOptionId);
+
+    const message = selectedOpt
+      ? `Our total budget is ₹${summary.totalBudget.toLocaleString()}. You have already confirmed **${selectedOpt.name}** for ${selectedTask?.title} (committed: ₹${summary.committedSpend.toLocaleString()}), leaving **₹${summary.remainingSpend.toLocaleString()}** remaining in your budget for travel, snacks, or other activities.`
+      : `Our total budget is ₹${summary.totalBudget.toLocaleString()}. Planned spend is ₹${summary.totalPlannedSpend.toLocaleString()}, leaving ₹${summary.remainingSpend.toLocaleString()} remaining.`;
+
+    return {
+      assistantMessage: message,
+      intent: "explain",
+      suggestedAnswers: ["Travel options from Electronic City", "View Final Event Hub"],
+      actions: [],
+      sourceNotes: ["Calculated deterministically from live plan budget."],
+    };
+  }
+
+  // 3. Travel / Vehicles / Commute Inquiry
+  if (lower.includes("travel") || lower.includes("bus") || lower.includes("metro") || lower.includes("cab") || lower.includes("auto") || lower.includes("electronic city")) {
+    return {
+      assistantMessage: "Here are travel options to get your group from Electronic City Phase 2 to Koramangala, with estimated costs and travel times:",
+      intent: "search",
+      suggestedAnswers: ["Select BMTC Bus", "Select 2 Auto-Rickshaws", "View Final Event Hub"],
+      actions: [
+        {
+          type: "upsert_task",
+          task: {
+            title: "Travel & Commute to Venue",
+            type: "travel",
+            priority: "high",
+            estimatedCost: 500,
+            costBasis: "per_event",
+          },
+        },
+        {
+          type: "propose_options",
+          taskType: "travel",
+          options: [
+            {
+              name: "BMTC Public Bus (Route V600KA)",
+              description: "Direct transit from Electronic City Phase 2 to Koramangala. Approx. 18 km, ~60 mins.",
+              category: "travel",
+              location: {
+                address: "Electronic City Phase 2 to Koramangala, Bengaluru",
+                directionsUrl: "https://www.google.com/maps/dir/Electronic+City+Phase+2/Koramangala",
+              },
+              price: {
+                amount: 35,
+                currency: "INR",
+                basis: "per_person",
+                isEstimate: true,
+              },
+              rating: { value: 4.2, scale: 5, reviewCount: 500, sourceName: "BMTC" },
+              fitReasons: ["Cheapest option (₹35/person × 6 = ₹210 total)", "Direct bus connection"],
+              warnings: ["Expect traffic congestion during evening rush hour"],
+            },
+            {
+              name: "Metro Feeder Shuttle + Namma Metro",
+              description: "Free ELCITA feeder bus to metro station + Yellow/Green metro line. Approx. 45-50 mins.",
+              category: "travel",
+              location: {
+                address: "Electronic City Metro Station to Koramangala",
+                directionsUrl: "https://www.google.com/maps/dir/Electronic+City/Koramangala",
+              },
+              price: {
+                amount: 50,
+                currency: "INR",
+                basis: "per_person",
+                isEstimate: true,
+              },
+              rating: { value: 4.6, scale: 5, reviewCount: 3200, sourceName: "Namma Metro" },
+              fitReasons: ["Avoids road traffic jams", "Clean, punctual transit (~₹300 for 6)"],
+              warnings: [],
+            },
+            {
+              name: "2 Auto-Rickshaws (3 people per auto)",
+              description: "Quick point-to-point ride for a group of 6 split across 2 autos. Approx. 35-40 mins.",
+              category: "travel",
+              location: {
+                address: "Electronic City to Koramangala, Bengaluru",
+                directionsUrl: "https://www.google.com/maps/dir/Electronic+City+Phase+2/Koramangala",
+              },
+              price: {
+                amount: 500,
+                currency: "INR",
+                basis: "per_event",
+                isEstimate: true,
+              },
+              rating: { value: 4.3, scale: 5, reviewCount: 1200, sourceName: "Local Transit" },
+              fitReasons: ["Door-to-door convenience", "Approx. ₹250 per auto (₹500 total)"],
+              warnings: ["Driver fare negotiation or meter check required"],
+            },
+            {
+              name: "Uber XL / Ola Prime Cab",
+              description: "Comfortable 6-seater or 2 sedans direct to the venue with AC. Approx. 35 mins.",
+              category: "travel",
+              location: {
+                address: "Door-to-door cab from Electronic City to Koramangala",
+                directionsUrl: "https://www.google.com/maps/dir/Electronic+City+Phase+2/Koramangala",
+              },
+              price: {
+                amount: 750,
+                currency: "INR",
+                basis: "per_event",
+                isEstimate: true,
+              },
+              rating: { value: 4.5, scale: 5, reviewCount: 45000, sourceName: "Uber/Ola" },
+              fitReasons: ["Maximum comfort and speed", "No transfers needed"],
+              warnings: ["Surge pricing may apply during peak commute hours"],
+            },
+          ],
+        },
+      ],
+      sourceNotes: ["Bengaluru transit estimates from Electronic City Phase 2 to Koramangala."],
+    };
+  }
+
+  // 4. Bowling / Activities / Mall Entertainment
+  if (lower.includes("bowling") || lower.includes("mall") || lower.includes("arcade") || lower.includes("grid")) {
+    return {
+      assistantMessage: "Here are top-rated bowling and gaming spots in Koramangala for group entertainment after food:",
+      intent: "search",
+      suggestedAnswers: ["Select The Grid - Gaming Arena", "Travel options", "View Final Event Hub"],
+      actions: [
+        {
+          type: "upsert_task",
+          task: {
+            title: "Activity: Bowling & Entertainment",
+            type: "activity",
+            priority: "high",
+            estimatedCost: 2280,
+            costBasis: "per_event",
+          },
+        },
+        {
+          type: "propose_options",
+          taskType: "activity",
+          options: [
+            {
+              name: "The Grid - Gaming Arena",
+              description: "Bowling alley, VR gaming, laser tag, and arcade arena in Koramangala.",
+              category: "activity",
+              location: {
+                address: "Koramangala 5th Block, Bengaluru",
+                directionsUrl: "https://www.google.com/maps/search/?api=1&query=The+Grid+Gaming+Arena+Koramangala",
+              },
+              price: {
+                amount: 380,
+                currency: "INR",
+                basis: "per_person",
+                isEstimate: true,
+              },
+              rating: { value: 4.5, scale: 5, reviewCount: 2800, sourceName: "Google Maps" },
+              fitReasons: ["₹380/person for 10 frames of bowling (₹2,280 for 6 guests)", "Great birthday energy in Koramangala"],
+              warnings: ["Can get crowded on weekends"],
+            },
+            {
+              name: "Timezone Nexus Koramangala",
+              description: "Premier family entertainment center with bowling lanes, arcade games, and prizes inside Nexus Mall.",
+              category: "activity",
+              location: {
+                address: "Nexus Koramangala Mall, Hosur Rd, Bengaluru",
+                directionsUrl: "https://www.google.com/maps/search/?api=1&query=Timezone+Nexus+Koramangala",
+              },
+              price: {
+                amount: 450,
+                currency: "INR",
+                basis: "per_person",
+                isEstimate: true,
+              },
+              rating: { value: 4.4, scale: 5, reviewCount: 4200, sourceName: "Google Maps" },
+              fitReasons: ["Located inside Nexus Mall with shopping and dining nearby", "Bowling + modern arcade games"],
+              warnings: [],
+            },
+            {
+              name: "Amoeba Bowling",
+              description: "Classic bowling lanes and video game arcade with pocket-friendly rates.",
+              category: "activity",
+              location: {
+                address: "Garuda Mall / Church Street, Bengaluru",
+                directionsUrl: "https://www.google.com/maps/search/?api=1&query=Amoeba+Bowling+Bangalore",
+              },
+              price: {
+                amount: 350,
+                currency: "INR",
+                basis: "per_person",
+                isEstimate: true,
+              },
+              rating: { value: 4.2, scale: 5, reviewCount: 6500, sourceName: "Google Maps" },
+              fitReasons: ["Economical bowling rate (₹350/person)", "Fun group vibes"],
+              warnings: [],
+            },
+          ],
+        },
+      ],
+      sourceNotes: ["Koramangala entertainment & bowling venue listings."],
     };
   }
 
