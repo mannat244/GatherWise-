@@ -1,4 +1,4 @@
-import { PlanningOption, Provenance } from "@/lib/types/plan";
+import { PlanningOption, Provenance, ProposedOption } from "@/lib/types/plan";
 
 export interface GroundingSource {
   title: string;
@@ -53,7 +53,7 @@ export function buildGoogleMapsUrl(placeName: string, location?: string): string
  * Normalizes a proposed place into a typed PlanningOption with honest provenance.
  */
 export function normalizeGroundedOption(
-  rawOption: Partial<PlanningOption> & { name: string },
+  rawOption: (Partial<PlanningOption> | ProposedOption) & { name: string },
   contextLocation?: string,
   sourceUrl?: string
 ): PlanningOption {
@@ -92,14 +92,15 @@ export function normalizeGroundedOption(
           isEstimate: rawOption.price.isEstimate ?? true,
         }
       : undefined,
-    rating: rawOption.rating
-      ? {
-          value: Math.min(5, Math.max(0, rawOption.rating.value)),
-          scale: rawOption.rating.scale || 5,
-          reviewCount: rawOption.rating.reviewCount,
-          sourceName: rawOption.rating.sourceName || "Google",
-        }
-      : undefined,
+    rating:
+      rawOption.rating && rawOption.rating.value !== undefined
+        ? {
+            value: Math.min(5, Math.max(0, rawOption.rating.value)),
+            scale: rawOption.rating.scale || 5,
+            reviewCount: rawOption.rating.reviewCount,
+            sourceName: rawOption.rating.sourceName || "Google",
+          }
+        : undefined,
     sourceUrl: rawOption.sourceUrl || sourceUrl || "https://www.google.com",
     bookingUrl: rawOption.bookingUrl,
     provenance,

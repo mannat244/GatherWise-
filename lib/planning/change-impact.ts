@@ -66,16 +66,29 @@ export function applyConstraintChanges(
     updatedConstraints.currency = updates.currency;
   }
 
-  if (updates.dietaryNeeds) {
+  if (updates.dietaryNeeds !== undefined) {
     changedFields.push("dietaryNeeds");
-    updatedConstraints.dietaryNeeds = Array.from(new Set([...updatedConstraints.dietaryNeeds, ...updates.dietaryNeeds]));
-    explanations.push(`Dietary requirements updated: ${updatedConstraints.dietaryNeeds.join(", ")}`);
+    updatedConstraints.dietaryNeeds = [...updates.dietaryNeeds];
+    explanations.push(
+      updates.dietaryNeeds.length > 0
+        ? `Dietary requirements updated: ${updatedConstraints.dietaryNeeds.join(", ")}`
+        : "Dietary requirements cleared."
+    );
   }
 
-  if (updates.accessibilityNeeds) {
+  if (updates.accessibilityNeeds !== undefined) {
     changedFields.push("accessibilityNeeds");
-    updatedConstraints.accessibilityNeeds = Array.from(new Set([...updatedConstraints.accessibilityNeeds, ...updates.accessibilityNeeds]));
-    explanations.push(`Accessibility requirements updated: ${updatedConstraints.accessibilityNeeds.join(", ")}`);
+    updatedConstraints.accessibilityNeeds = [...updates.accessibilityNeeds];
+    explanations.push(
+      updates.accessibilityNeeds.length > 0
+        ? `Accessibility requirements updated: ${updatedConstraints.accessibilityNeeds.join(", ")}`
+        : "Accessibility requirements cleared."
+    );
+  }
+
+  if (updates.preferences !== undefined) {
+    changedFields.push("preferences");
+    updatedConstraints.preferences = [...updates.preferences];
   }
 
   // 2. Identify top-level event changes

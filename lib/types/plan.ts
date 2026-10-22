@@ -67,7 +67,7 @@ export const PlanningOptionSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   category: z.string().optional(),
-  status: OptionStatusSchema.default("suggested"),
+  status: OptionStatusSchema.default("suggested").optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
   location: OptionLocationSchema.optional(),
   price: OptionPriceSchema.optional(),
@@ -187,6 +187,45 @@ export interface BudgetSummary {
   lineItems: BudgetLineItem[];
 }
 
+export const ProposedOptionSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  status: OptionStatusSchema.default("suggested").optional(),
+  imageUrl: z.string().optional(),
+  location: z
+    .object({
+      address: z.string().optional(),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+      directionsUrl: z.string().optional(),
+    })
+    .optional(),
+  price: z
+    .object({
+      amount: z.number().nonnegative().optional(),
+      currency: z.string().default("INR"),
+      unit: z.string().optional(),
+      basis: PriceBasisSchema.default("per_event"),
+      isEstimate: z.boolean().default(true),
+    })
+    .optional(),
+  rating: z
+    .object({
+      value: z.number().optional(),
+      scale: z.number().default(5),
+      reviewCount: z.number().optional(),
+      sourceName: z.string().optional(),
+    })
+    .optional(),
+  sourceUrl: z.string().optional(),
+  bookingUrl: z.string().optional(),
+  fitReasons: z.array(z.string()).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+export type ProposedOption = z.infer<typeof ProposedOptionSchema>;
+
 // --- Action Union / Proposals ---
 export const AgentActionSchema = z.discriminatedUnion("type", [
   z.object({
@@ -216,8 +255,9 @@ export const AgentActionSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("propose_options"),
-    taskId: z.string(),
-    options: z.array(PlanningOptionSchema),
+    taskId: z.string().optional(),
+    taskType: TaskTypeSchema.optional(),
+    options: z.array(ProposedOptionSchema),
   }),
   z.object({
     type: z.literal("select_option"),

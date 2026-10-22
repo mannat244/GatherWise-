@@ -20,10 +20,33 @@ import { ChatPanel, ChatMessage } from "@/components/chat/ChatPanel";
 import { FinalHubView } from "@/components/hub/FinalHubView";
 import { RotateCcw, PartyPopper } from "lucide-react";
 
+function createCleanEventPlan(title: string = "New Event"): EventPlan {
+  return {
+    id: `plan-${Date.now()}`,
+    version: 1,
+    title,
+    timezone:
+      typeof Intl !== "undefined"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : "Asia/Kolkata",
+    constraints: {
+      currency: "INR",
+      contingencyPercent: 10,
+      dietaryNeeds: [],
+      accessibilityNeeds: [],
+      preferences: [],
+      exclusions: [],
+    },
+    tasks: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export default function Home() {
   const [hasStarted, setHasStarted] = useState(false);
   const [activeTab, setActiveTab] = useState<"workspace" | "hub">("workspace");
-  const [plan, setPlan] = useState<EventPlan>(SAMPLE_BIRTHDAY_PLAN);
+  const [plan, setPlan] = useState<EventPlan>(createCleanEventPlan());
   const [isLoading, setIsLoading] = useState(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -31,14 +54,13 @@ export default function Home() {
       id: "msg-1",
       role: "assistant",
       content:
-        "Welcome to GatherWise! I've converted your event brief into an editable checklist and budget. Ask for venue options, update your constraints, or explore next steps.",
+        "Welcome to GatherWise! Describe your event idea to begin, and I will build an actionable checklist, budget, and grounded recommendations.",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       suggestedAnswers: [
-        "Show me cafe options in Koramangala",
-        "We have 15 guests instead of 12",
-        "Reduce budget to ₹4,000",
+        "Help me plan a birthday party with 5 friends in Koramangala under ₹3,000",
+        "Quiet date night in Indiranagar under ₹2,500",
       ],
-      isGrounded: true,
+      isGrounded: false,
     },
   ]);
 
@@ -125,13 +147,9 @@ export default function Home() {
 
   // Transition from landing prompt to workspace
   const handleStartWithPrompt = (promptText: string) => {
-    const initialPlan: EventPlan = {
-      ...SAMPLE_BIRTHDAY_PLAN,
-      id: `plan-${Date.now()}`,
-      title: promptText.length > 40 ? `${promptText.slice(0, 37)}...` : promptText,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    const initialPlan: EventPlan = createCleanEventPlan(
+      promptText.length > 50 ? `${promptText.slice(0, 47)}...` : promptText
+    );
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -271,7 +289,21 @@ export default function Home() {
   // Reset to landing and clear persisted storage
   const handleReset = () => {
     clearPlanLocally();
-    setPlan(SAMPLE_BIRTHDAY_PLAN);
+    setPlan(createCleanEventPlan());
+    setMessages([
+      {
+        id: "msg-1",
+        role: "assistant",
+        content:
+          "Welcome to GatherWise! Describe your event idea to begin, and I will build an actionable checklist, budget, and grounded recommendations.",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        suggestedAnswers: [
+          "Help me plan a birthday party with 5 friends in Koramangala under ₹3,000",
+          "Quiet date night in Indiranagar under ₹2,500",
+        ],
+        isGrounded: false,
+      },
+    ]);
     setHasStarted(false);
     setActiveTab("workspace");
   };
