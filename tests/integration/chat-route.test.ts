@@ -1,9 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { POST } from "@/app/api/chat/route";
 import { NextRequest } from "next/server";
 import { SAMPLE_BIRTHDAY_PLAN } from "@/lib/storage/mock-data";
+import { resetCooldownsForTesting } from "@/lib/rate-limit/cooldown";
+import { DEFAULT_GEMINI_MODEL } from "@/lib/gemini/client";
 
 describe("POST /api/chat Route Handler", () => {
+  beforeEach(() => {
+    resetCooldownsForTesting();
+  });
   it("rejects invalid request payloads with HTTP 400", async () => {
     const invalidReq = new NextRequest("http://localhost:3000/api/chat", {
       method: "POST",
@@ -271,7 +276,7 @@ describe("POST /api/chat Route Handler", () => {
 
     // Verify observability telemetry
     expect(data.telemetry).toBeDefined();
-    expect(data.telemetry.model).toBe("gemini-flash-lite-latest");
+    expect(data.telemetry.model).toBe(DEFAULT_GEMINI_MODEL);
     expect(typeof data.telemetry.latencyMs).toBe("number");
   });
 
@@ -289,7 +294,34 @@ describe("POST /api/chat Route Handler", () => {
     const data = await res.json();
 
     expect(data.telemetry).toBeDefined();
-    expect(data.telemetry.model).toBe("gemini-flash-lite-latest");
+    expect(data.telemetry.model).toBe(DEFAULT_GEMINI_MODEL);
     expect(data.telemetry.searchGroundingFired).toBe(false);
+  });
+
+  it("enforces 4-second cooldown rate limit on rapid consecutive requests (15 RPM Free Tier)", async () => {
+    const makeReq = () =>
+      new NextRequest("http://localhost:3000/api/chat", {
+        method: "POST",
+        headers: { "x-client-id": "cooldown-rate-test-client" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: "first quick message" }],
+          currentPlan: SAMPLE_BIRTHDAY_PLAN,
+        }),
+      });
+
+    // 1st request should succeed
+    const firstRes = await POST(makeReq());
+    expect(firstRes.status).toBe(200);
+
+    // Immediate 2nd request from same client should trigger HTTP 429
+    const secondRes = await POST(makeReq());
+    expect(secondRes.status).toBe(429);
+    expect(secondRes.headers.get("Retry-After")).toBeDefined();
+
+    const data = await secondRes.json();
+    expect(data.error).toBe("Rate limit exceeded");
+    expect(data.retryAfter).toBeGreaterThanOrEqual(1);
+    expect(data.rateLimit.rpm).toBe(15);
+    expect(data.rateLimit.rpd).toBe(500);
   });
 });

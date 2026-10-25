@@ -20,4 +20,4 @@ export function getGeminiClient(): GoogleGenAI | null {
   return genAIInstance;
 }
 
-export const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
+export const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";

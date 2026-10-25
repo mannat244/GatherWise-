@@ -65,7 +65,9 @@ GatherWise bridges the gap between conversational AI and structured planning. In
 - **Language**: TypeScript 5 with strict type safety
 - **Styling**: Tailwind CSS with custom palette and dedicated `@media print` rules
 - **AI SDK**: Official `@google/genai` (v2.30.0) with Google Search Grounding
-- **Default AI Model**: `gemini-2.5-flash-lite` (low latency, high reliability, active grounding quota)
+- **Default AI Model**: `gemini-3.5-flash-lite` (Free Tier: 15 RPM, 500 RPD, 250k TPM)
+- **Rate Limit & Quota Protection**: Client & server 4s message cooldown pacing (15 RPM) and 500 RPD daily request counter
+- **AI Observability**: Live token telemetry (prompt, candidate, grounding search tokens) and round-trip latency inspector
 - **Validation**: Zod (runtime validation on all API and state boundaries)
 - **Testing**: Vitest (pure unit tests and integration tests)
 - **Icons**: Lucide React
@@ -93,7 +95,7 @@ cp .env.example .env.local
 Edit `.env.local` to provide your Gemini API key:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 > *Note: If `GEMINI_API_KEY` is not provided, GatherWise automatically runs in deterministic offline copilot mode, allowing full inspection of the checklist, budget bar, replanning, and export features.*
 
@@ -107,7 +109,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ```bash
 pnpm test
 ```
-Runs all 26 automated unit and integration tests verifying budget math, task transitions, grounding extraction, and storage hydration.
+Runs all 44 automated unit and integration tests verifying budget math, task transitions, grounding extraction, rate limit cooldowns, and daily usage tracking.
 
 ### 6. Production Build
 ```bash
@@ -153,7 +155,7 @@ Follow this sequence to evaluate the complete end-to-end user journey:
 - **Branch Count**: Exactly one branch (`main`).
 - **Repository Size Budget**: < 1 MB (Verified with `git count-objects -vH`; strict `.gitignore` excludes `.next/`, `node_modules/`, caches, and media bloat).
 - **Security & Secret Protection**: All Gemini API calls run server-side via Next.js Route Handlers. `.env.local` is ignored and zero credentials are committed to Git.
-- **Test Coverage**: 26 tests passing across 7 suites (`pnpm test`).
+- **Test Coverage**: 44 tests passing across 9 suites (`pnpm test`).
 - **Reproducible Build**: Clean static and dynamic route compilation with zero errors (`pnpm run build`).
 
 ---

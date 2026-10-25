@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { EventPlan, ChatTelemetry } from "@/lib/types/plan";
+import { DailyUsageState } from "@/lib/storage/usage-limiter";
 import { formatCurrency } from "@/lib/planning/budget";
 import {
   Calendar,
@@ -35,6 +36,7 @@ interface PlanHeaderProps {
   }) => void;
   telemetry?: ChatTelemetry | null;
   cumulativeTokens?: number;
+  dailyUsage?: DailyUsageState;
 }
 
 export function PlanHeader({
@@ -44,6 +46,7 @@ export function PlanHeader({
   onUpdateConstraints,
   telemetry,
   cumulativeTokens = 0,
+  dailyUsage,
 }: PlanHeaderProps) {
   const [isEditingConstraints, setIsEditingConstraints] = useState(false);
   const [showTelemetryModal, setShowTelemetryModal] = useState(false);
@@ -109,6 +112,10 @@ export function PlanHeader({
               {plan.eventType || "Event Plan"}
             </span>
             <span className="text-xs text-stone-600 font-medium">v{plan.version}</span>
+            <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700 shadow-2xs">
+              <Sparkles className="h-3 w-3 text-indigo-600" />
+              <span>Free Plan (15 RPM • 500 RPD)</span>
+            </div>
             {telemetry && (
               <button
                 type="button"
@@ -395,10 +402,11 @@ export function PlanHeader({
             </button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
             <div className="rounded-lg border border-stone-200 bg-white p-2.5">
               <span className="text-[10px] text-stone-500 uppercase font-semibold">Active Model</span>
               <p className="mt-1 font-mono font-bold text-stone-900">{telemetry.model}</p>
+              <span className="text-[10px] text-indigo-600 font-semibold">Free Tier (15 RPM)</span>
             </div>
             <div className="rounded-lg border border-stone-200 bg-white p-2.5">
               <span className="text-[10px] text-stone-500 uppercase font-semibold">Turn Tokens</span>
@@ -411,6 +419,15 @@ export function PlanHeader({
               <span className="text-[10px] text-stone-500 uppercase font-semibold">Execution Latency</span>
               <p className="mt-1 font-mono font-bold text-stone-900">{telemetry.latencyMs} ms</p>
               <span className="text-[10px] text-stone-400">{(telemetry.latencyMs / 1000).toFixed(2)}s round-trip</span>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-2.5">
+              <span className="text-[10px] text-stone-500 uppercase font-semibold">Daily Quota</span>
+              <p className="mt-1 font-mono font-bold text-stone-900">
+                {dailyUsage ? `${dailyUsage.count} / ${dailyUsage.limit}` : "Tracked"}
+              </p>
+              <span className="text-[10px] text-stone-400">
+                {dailyUsage ? `${dailyUsage.remaining} left today` : "500 RPD cap"}
+              </span>
             </div>
             <div className="rounded-lg border border-stone-200 bg-white p-2.5">
               <span className="text-[10px] text-stone-500 uppercase font-semibold">Session Total</span>

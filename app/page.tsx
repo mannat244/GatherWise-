@@ -18,7 +18,13 @@ import { BudgetBar } from "@/components/workspace/BudgetBar";
 import { TaskChecklist } from "@/components/tasks/TaskChecklist";
 import { ChatPanel, ChatMessage } from "@/components/chat/ChatPanel";
 import { FinalHubView } from "@/components/hub/FinalHubView";
-import { RotateCcw, PartyPopper } from "lucide-react";
+import { RotateCcw, PartyPopper, Sparkles, AlertCircle } from "lucide-react";
+import {
+  getDailyUsage,
+  incrementDailyUsage,
+  DailyUsageState,
+  FREE_TIER_CONFIG,
+} from "@/lib/storage/usage-limiter";
 
 function createCleanEventPlan(title: string = "New Event"): EventPlan {
   return {
@@ -50,6 +56,8 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [telemetry, setTelemetry] = useState<ChatTelemetry | null>(null);
   const [cumulativeTokens, setCumulativeTokens] = useState<number>(0);
+  const [dailyUsage, setDailyUsage] = useState<DailyUsageState | undefined>(undefined);
+  const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -70,6 +78,7 @@ export default function Home() {
 
   // 1. Safe Hydration from LocalStorage on initial client mount
   useEffect(() => {
+    setDailyUsage(getDailyUsage());
     const saved = loadPlanLocally();
     if (saved) {
       setPlan(saved.plan);
@@ -80,6 +89,15 @@ export default function Home() {
     }
   }, []);
 
+  // 1b. Rate limit cooldown timer countdown (15 RPM pacing)
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setCooldownSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownSeconds]);
+
   // 2. Auto-persist changes to LocalStorage
   useEffect(() => {
     if (hasStarted) {
@@ -89,6 +107,27 @@ export default function Home() {
 
   // Calls the server-side /api/chat route handler
   const callChatApi = async (newMessages: ChatMessage[], currentPlan: EventPlan) => {
+    // 1. Check daily quota limits (500 RPD)
+    const currentUsage = getDailyUsage();
+    setDailyUsage(currentUsage);
+
+    if (currentUsage.isLimitReached) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `asst-quota-${Date.now()}`,
+          role: "assistant",
+          content:
+            "Daily Free Tier request quota reached (500/500 requests). Your current plan and tasks are fully preserved. Quota automatically resets at 00:00 UTC.",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          suggestedAnswers: ["View Final Event Hub"],
+        },
+      ]);
+      return;
+    }
+
+    // 2. Start rate limit cooldown timer (15 RPM -> 4s)
+    setCooldownSeconds(FREE_TIER_CONFIG.cooldownSeconds);
     setIsLoading(true);
 
     try {
@@ -110,9 +149,32 @@ export default function Home() {
         }),
       });
 
+      // Handle server-side 429 rate limit gracefully
+      if (res.status === 429) {
+        const errData = await res.json().catch(() => ({}));
+        const waitTime = errData.retryAfter || FREE_TIER_CONFIG.cooldownSeconds;
+        setCooldownSeconds(waitTime);
+
+        const rateLimitMsg: ChatMessage = {
+          id: `asst-ratelimit-${Date.now()}`,
+          role: "assistant",
+          content:
+            errData.message ||
+            `Free Tier cooldown: Please wait ${waitTime}s between messages to respect the 15 RPM limit on Gemini 3.5 Flash Lite. Your plan remains preserved.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          suggestedAnswers: ["Wait and retry", "View Final Event Hub"],
+        };
+        setMessages((prev) => [...prev, rateLimitMsg]);
+        return;
+      }
+
       if (!res.ok) {
         throw new Error(`Server returned status ${res.status}`);
       }
+
+      // Successful API call -> increment daily usage
+      const updatedUsage = incrementDailyUsage();
+      setDailyUsage(updatedUsage);
 
       const data = await res.json();
 
@@ -181,6 +243,10 @@ export default function Home() {
 
   // Chat message send handler
   const handleSendMessage = (text: string) => {
+    if (cooldownSeconds > 0 || isLoading || dailyUsage?.isLimitReached) {
+      return;
+    }
+
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: "user",
@@ -338,22 +404,46 @@ export default function Home() {
             </div>
           </button>
 
-          {hasStarted && (
-            <div className="flex items-center gap-3">
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200/60 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Saved in browser
-              </span>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>New Event</span>
-              </button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Free Plan Label Badge */}
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50/90 px-2.5 py-1 text-xs font-semibold text-indigo-700 shadow-2xs">
+              <Sparkles className="h-3 w-3 text-indigo-600" />
+              <span className="font-bold">Free Plan</span>
+              <span className="hidden md:inline text-indigo-400">•</span>
+              <span className="hidden md:inline text-[11px] font-normal text-indigo-800">Gemini 3.5 Flash Lite</span>
             </div>
-          )}
+
+            {/* Daily Usage Limiter Counter */}
+            {dailyUsage && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-mono font-medium ${
+                  dailyUsage.isLimitReached
+                    ? "bg-rose-50 text-rose-700 border-rose-200 font-bold"
+                    : "bg-stone-100 text-stone-700 border-stone-200"
+                }`}
+                title="Daily request usage (500 RPD free tier limit, resets 00:00 UTC)"
+              >
+                {dailyUsage.count}/{dailyUsage.limit} <span className="hidden sm:inline text-stone-500">RPD</span>
+              </span>
+            )}
+
+            {hasStarted && (
+              <>
+                <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200/60 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Saved
+                </span>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>New Event</span>
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -374,6 +464,7 @@ export default function Home() {
               onUpdateConstraints={handleUpdateConstraints}
               telemetry={telemetry}
               cumulativeTokens={cumulativeTokens}
+              dailyUsage={dailyUsage}
             />
 
             {/* Split-Screen Workspace (Desktop) */}
@@ -384,6 +475,8 @@ export default function Home() {
                   <ChatPanel
                     messages={messages}
                     isLoading={isLoading}
+                    cooldownSeconds={cooldownSeconds}
+                    dailyUsage={dailyUsage}
                     onSendMessage={handleSendMessage}
                     onSelectSuggestion={handleSendMessage}
                   />

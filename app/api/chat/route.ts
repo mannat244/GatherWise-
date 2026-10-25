@@ -19,6 +19,7 @@ import {
   GroundingExtraction,
 } from "@/lib/gemini/grounding";
 import { parseModelResponseIntelligently } from "@/lib/gemini/parser";
+import { checkCooldownRateLimit } from "@/lib/rate-limit/cooldown";
 
 const ChatRequestSchema = z.object({
   messages: z.array(
@@ -49,6 +50,38 @@ export async function POST(req: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // Cooldown & Rate Limiting Enforcement (15 RPM -> 4s cooldown)
+    const bypassCooldown = req.headers.get("x-bypass-cooldown") === "true";
+    const clientId =
+      req.headers.get("x-client-id") ||
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "client-default";
+
+    if (!bypassCooldown) {
+      const cooldownCheck = checkCooldownRateLimit(clientId);
+      if (!cooldownCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: "Rate limit exceeded",
+            message: `Free Tier Cooldown: Please wait ${cooldownCheck.retryAfterSeconds}s between requests to respect the 15 RPM limit on ${DEFAULT_GEMINI_MODEL}.`,
+            retryAfter: cooldownCheck.retryAfterSeconds,
+            rateLimit: {
+              model: DEFAULT_GEMINI_MODEL,
+              rpm: 15,
+              rpd: 500,
+              tier: "free",
+            },
+          },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(cooldownCheck.retryAfterSeconds),
+            },
+          }
+        );
+      }
     }
 
     const { messages, currentPlan, clientContext } = parseResult.data;
@@ -177,13 +210,23 @@ export async function POST(req: NextRequest) {
         }
       } catch (geminiError: any) {
         console.error("Gemini API call failed:", geminiError);
+        const isRateLimit =
+          geminiError?.status === 429 ||
+          String(geminiError).includes("429") ||
+          String(geminiError).includes("RESOURCE_EXHAUSTED");
+
         proposal = {
-          assistantMessage:
-            "I experienced a temporary connection issue reaching the Gemini API. Your current plan and tasks are preserved.",
+          assistantMessage: isRateLimit
+            ? `Google Gemini Free Tier rate limit reached (15 RPM / 500 RPD). Please wait 4 seconds before sending your next request. Your current plan and tasks are fully preserved.`
+            : "I experienced a temporary connection issue reaching the Gemini API. Your current plan and tasks are preserved.",
           intent: "explain",
-          suggestedAnswers: [],
+          suggestedAnswers: isRateLimit ? ["Wait and retry", "View Final Event Hub"] : [],
           actions: [],
-          sourceNotes: ["AI service unreachable; local state preserved."],
+          sourceNotes: [
+            isRateLimit
+              ? "Gemini Free Tier 429 rate limit hit; waiting for cooldown window."
+              : "AI service unreachable; local state preserved.",
+          ],
         };
         telemetry.latencyMs = Date.now() - startTime;
       }
