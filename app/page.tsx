@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { EventPlan, TaskStatus, TaskType, PlanningTask } from "@/lib/types/plan";
+import { EventPlan, TaskStatus, TaskType, PlanningTask, ChatTelemetry } from "@/lib/types/plan";
 import { SAMPLE_BIRTHDAY_PLAN } from "@/lib/storage/mock-data";
 import { calculateBudgetSummary } from "@/lib/planning/budget";
 import { selectTaskOption, transitionTaskStatus } from "@/lib/planning/task-state";
@@ -48,6 +48,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"workspace" | "hub">("workspace");
   const [plan, setPlan] = useState<EventPlan>(createCleanEventPlan());
   const [isLoading, setIsLoading] = useState(false);
+  const [telemetry, setTelemetry] = useState<ChatTelemetry | null>(null);
+  const [cumulativeTokens, setCumulativeTokens] = useState<number>(0);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -113,6 +115,11 @@ export default function Home() {
       }
 
       const data = await res.json();
+
+      if (data.telemetry) {
+        setTelemetry(data.telemetry);
+        setCumulativeTokens((prev) => prev + (data.telemetry.totalTokens || 0));
+      }
 
       if (data.updatedPlan) {
         setPlan(data.updatedPlan);
@@ -365,6 +372,8 @@ export default function Home() {
               activeTab={activeTab}
               onTabChange={setActiveTab}
               onUpdateConstraints={handleUpdateConstraints}
+              telemetry={telemetry}
+              cumulativeTokens={cumulativeTokens}
             />
 
             {/* Split-Screen Workspace (Desktop) */}

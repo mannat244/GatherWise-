@@ -293,3 +293,17 @@ export const AgentProposalSchema = z.object({
   sourceNotes: z.array(z.string()).default([]),
 });
 export type AgentProposal = z.infer<typeof AgentProposalSchema>;
+
+// --- Observability & Telemetry ---
+export const ChatTelemetrySchema = z.object({
+  model: z.string(),
+  promptTokens: z.number().nonnegative().default(0),
+  candidateTokens: z.number().nonnegative().default(0),
+  toolTokens: z.number().nonnegative().default(0),
+  totalTokens: z.number().nonnegative().default(0),
+  latencyMs: z.number().nonnegative().default(0),
+  searchGroundingFired: z.boolean().default(false),
+  searchGroundingReason: z.string().optional(),
+  estimatedCostUsd: z.number().nonnegative().default(0),
+});
+export type ChatTelemetry = z.infer<typeof ChatTelemetrySchema>;

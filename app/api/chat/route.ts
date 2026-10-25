@@ -63,28 +63,96 @@ export async function POST(req: NextRequest) {
       sources: [],
     };
 
+    const startTime = Date.now();
+    let telemetry = {
+      model: DEFAULT_GEMINI_MODEL,
+      promptTokens: 0,
+      candidateTokens: 0,
+      toolTokens: 0,
+      totalTokens: 0,
+      latencyMs: 0,
+      searchGroundingFired: false,
+      searchGroundingReason: "Local intent",
+      estimatedCostUsd: 0,
+    };
+
     if (!gemini) {
       // Graceful Offline Fallback: Operates when GEMINI_API_KEY is not configured
       proposal = generateOfflineProposal(lastUserMessage, currentPlan);
+      telemetry.latencyMs = Date.now() - startTime;
+      telemetry.searchGroundingReason = "Offline mock mode";
     } else {
       try {
         const systemInstruction = buildSystemInstruction(currentPlan, clientContext);
 
-        const promptText = messages
-          .map((m) => `${m.role === "user" ? "User" : "GatherWise"}: ${m.content}`)
+        // Deterministic Tool Gating: Only invoke Search Grounding when external places/routes are needed
+        const shouldSearch = shouldTriggerSearchGrounding(lastUserMessage, currentPlan);
+        telemetry.searchGroundingReason = shouldSearch
+          ? "External discovery query (Grounding enabled)"
+          : "Local planning / budget intent (Grounding skipped to save tokens)";
+
+        // History Compaction: Sliding window of recent turns, stripping redundant option dumps
+        const recentMessages = messages.slice(-4);
+        const promptText = recentMessages
+          .map((m) => {
+            if (m.role === "assistant") {
+              const lines = m.content.split("\n").filter((l) => !l.trim().startsWith("*") && !l.trim().startsWith("-"));
+              return `GatherWise: ${lines.slice(0, 2).join(" ")}`;
+            }
+            return `User: ${m.content}`;
+          })
           .join("\n\n");
 
-        const response = await gemini.models.generateContent({
-          model: DEFAULT_GEMINI_MODEL,
-          contents: promptText,
-          config: {
-            systemInstruction,
-            temperature: 0.2,
-            tools: [{ googleSearch: {} }],
-          },
-        });
+        let response: any;
+        try {
+          response = await gemini.models.generateContent({
+            model: DEFAULT_GEMINI_MODEL,
+            contents: promptText,
+            config: {
+              systemInstruction,
+              temperature: 0.2,
+              ...(shouldSearch ? { tools: [{ googleSearch: {} }] } : {}),
+            },
+          });
+        } catch (callErr: any) {
+          // If Search Grounding threw 429 quota exhaustion, gracefully retry WITHOUT tools
+          if (shouldSearch && (callErr?.status === 429 || String(callErr).includes("429") || String(callErr).includes("RESOURCE_EXHAUSTED"))) {
+            console.warn("[GatherWise Observability] Search Grounding quota hit 429; falling back to direct model generation.");
+            telemetry.searchGroundingReason = "Search Grounding quota exhausted (429); gracefully degraded to direct generation";
+            response = await gemini.models.generateContent({
+              model: DEFAULT_GEMINI_MODEL,
+              contents: promptText,
+              config: {
+                systemInstruction,
+                temperature: 0.2,
+              },
+            });
+          } else {
+            throw callErr;
+          }
+        }
 
         groundingData = extractGroundingMetadata(response);
+
+        // Observability Metrics Extraction
+        const latency = Date.now() - startTime;
+        const usage = response.usageMetadata;
+        if (usage) {
+          telemetry.promptTokens = usage.promptTokenCount ?? 0;
+          telemetry.candidateTokens = usage.candidatesTokenCount ?? 0;
+          telemetry.toolTokens = (usage as any).toolUsePromptTokenCount ?? 0;
+          telemetry.totalTokens =
+            usage.totalTokenCount ?? (telemetry.promptTokens + telemetry.candidateTokens + telemetry.toolTokens);
+        }
+        telemetry.latencyMs = latency;
+        telemetry.searchGroundingFired = groundingData.isGrounded;
+        // Cost estimate for gemini-flash-lite ($0.075 / 1M input, $0.30 / 1M output)
+        telemetry.estimatedCostUsd =
+          (telemetry.promptTokens * 0.075 + telemetry.candidateTokens * 0.3) / 1_000_000;
+
+        console.log(
+          `[GatherWise Observability] Model: ${telemetry.model} | Prompt: ${telemetry.promptTokens} | Tool/Search: ${telemetry.toolTokens} | Output: ${telemetry.candidateTokens} | Total: ${telemetry.totalTokens} | Latency: ${telemetry.latencyMs}ms | Grounded: ${telemetry.searchGroundingFired}`
+        );
 
         const rawText = response.text || "";
         proposal = parseModelResponseIntelligently(rawText, currentPlan, groundingData);
@@ -117,6 +185,7 @@ export async function POST(req: NextRequest) {
           actions: [],
           sourceNotes: ["AI service unreachable; local state preserved."],
         };
+        telemetry.latencyMs = Date.now() - startTime;
       }
     }
 
@@ -135,6 +204,7 @@ export async function POST(req: NextRequest) {
       isGrounded: groundingData.isGrounded,
       groundingSources: groundingData.sources,
       webSearchQueries: groundingData.searchQueries,
+      telemetry,
     });
   } catch (error: any) {
     console.error("Unhandled error in /api/chat:", error);
@@ -146,6 +216,43 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Deterministic Server-Side Tool Gating:
+ * Only enables Google Search Grounding when real-world external discovery is requested.
+ * Prevents wasting search tokens & quota on local constraint edits or budget inquiries.
+ */
+function shouldTriggerSearchGrounding(userMessage: string, currentPlan: EventPlan): boolean {
+  const lower = userMessage.toLowerCase();
+
+  // Internal inquiries: NEVER call Google Search
+  if (
+    (lower.includes("wheelchair") && (lower.includes("dont") || lower.includes("don't") || lower.includes("no") || lower.includes("remove") || lower.includes("who said"))) ||
+    (lower.includes("dietary") && (lower.includes("remove") || lower.includes("no"))) ||
+    (lower.includes("cost") && !lower.includes("options")) ||
+    (lower.includes("what was our") || lower.includes("what is our")) ||
+    (lower.includes("budget") && (lower.includes("remaining") || lower.includes("total") || lower.includes("spent"))) ||
+    lower.includes("did you forget") ||
+    lower.includes("did u forget") ||
+    lower.includes("update the plan") ||
+    lower.includes("view hub")
+  ) {
+    return false;
+  }
+
+  // Discovery keywords where search grounding is genuinely needed
+  const discoveryKeywords = [
+    "venue", "cafe", "restaurant", "place", "spot", "dinner", "lunch", "food",
+    "burger", "pizza", "fast food", "bowling", "arcade", "mall", "travel", "cab",
+    "uber", "ola", "bus", "metro", "auto", "cake", "bakery", "options", "suggest",
+    "find", "recommend", "where can", "look for"
+  ];
+
+  const hasDiscovery = discoveryKeywords.some((kw) => lower.includes(kw));
+  const hasNoOptionsYet = currentPlan.tasks.length === 0 || !currentPlan.tasks.some((t) => t.options.length > 0);
+
+  return hasDiscovery || hasNoOptionsYet;
 }
 
 /**

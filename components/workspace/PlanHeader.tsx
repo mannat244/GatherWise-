@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { EventPlan } from "@/lib/types/plan";
+import { EventPlan, ChatTelemetry } from "@/lib/types/plan";
 import { formatCurrency } from "@/lib/planning/budget";
 import {
   Calendar,
@@ -15,6 +15,9 @@ import {
   HeartHandshake,
   Utensils,
   X,
+  Zap,
+  Activity,
+  Cpu,
 } from "lucide-react";
 
 interface PlanHeaderProps {
@@ -30,6 +33,8 @@ interface PlanHeaderProps {
     accessibilityNeeds?: string[];
     preferences?: string[];
   }) => void;
+  telemetry?: ChatTelemetry | null;
+  cumulativeTokens?: number;
 }
 
 export function PlanHeader({
@@ -37,8 +42,11 @@ export function PlanHeader({
   activeTab,
   onTabChange,
   onUpdateConstraints,
+  telemetry,
+  cumulativeTokens = 0,
 }: PlanHeaderProps) {
   const [isEditingConstraints, setIsEditingConstraints] = useState(false);
+  const [showTelemetryModal, setShowTelemetryModal] = useState(false);
   const [guests, setGuests] = useState(plan.guestCount?.toString() || "");
   const [budget, setBudget] = useState(plan.constraints.budgetAmount?.toString() || "");
   const [loc, setLoc] = useState(plan.location || "");
@@ -101,6 +109,28 @@ export function PlanHeader({
               {plan.eventType || "Event Plan"}
             </span>
             <span className="text-xs text-stone-600 font-medium">v{plan.version}</span>
+            {telemetry && (
+              <button
+                type="button"
+                onClick={() => setShowTelemetryModal(!showTelemetryModal)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors shadow-2xs"
+                title="View AI Token Usage & Latency Observability"
+              >
+                <Zap className="h-3 w-3 text-indigo-600" />
+                <span>{telemetry.totalTokens.toLocaleString()} tokens</span>
+                <span className="text-indigo-400">•</span>
+                <span>{(telemetry.latencyMs / 1000).toFixed(1)}s</span>
+                {telemetry.searchGroundingFired ? (
+                  <span className="rounded bg-indigo-200 px-1 text-[9px] font-bold text-indigo-900">
+                    Grounded
+                  </span>
+                ) : (
+                  <span className="rounded bg-emerald-100 px-1 text-[9px] font-medium text-emerald-800">
+                    Zero Tool Waste
+                  </span>
+                )}
+              </button>
+            )}
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl">
             {plan.title}
@@ -344,6 +374,64 @@ export function PlanHeader({
             </div>
           </div>
         </form>
+      )}
+
+      {/* Live AI Observability & Token Inspector */}
+      {showTelemetryModal && telemetry && (
+        <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-white to-stone-50 p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-indigo-600" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-900">
+                AI Observability & Token Telemetry
+              </h4>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowTelemetryModal(false)}
+              className="rounded-lg p-1 text-stone-400 hover:text-stone-700 hover:bg-stone-100"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="rounded-lg border border-stone-200 bg-white p-2.5">
+              <span className="text-[10px] text-stone-500 uppercase font-semibold">Active Model</span>
+              <p className="mt-1 font-mono font-bold text-stone-900">{telemetry.model}</p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-2.5">
+              <span className="text-[10px] text-stone-500 uppercase font-semibold">Turn Tokens</span>
+              <p className="mt-1 font-mono font-bold text-indigo-600">{telemetry.totalTokens.toLocaleString()}</p>
+              <span className="text-[10px] text-stone-400">
+                {telemetry.promptTokens} in • {telemetry.candidateTokens} out
+              </span>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-2.5">
+              <span className="text-[10px] text-stone-500 uppercase font-semibold">Execution Latency</span>
+              <p className="mt-1 font-mono font-bold text-stone-900">{telemetry.latencyMs} ms</p>
+              <span className="text-[10px] text-stone-400">{(telemetry.latencyMs / 1000).toFixed(2)}s round-trip</span>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-2.5">
+              <span className="text-[10px] text-stone-500 uppercase font-semibold">Session Total</span>
+              <p className="mt-1 font-mono font-bold text-stone-900">{cumulativeTokens.toLocaleString()}</p>
+              <span className="text-[10px] text-stone-400">est. ${(telemetry.estimatedCostUsd).toFixed(5)}</span>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-2.5 text-xs text-indigo-900 flex items-start gap-2">
+            <Activity className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Grounding Strategy Decision:</p>
+              <p className="text-[11px] text-indigo-700">{telemetry.searchGroundingReason}</p>
+              {telemetry.toolTokens > 0 && (
+                <p className="mt-1 text-[10px] text-indigo-600 font-mono">
+                  Grounding injected {telemetry.toolTokens} search tokens into context.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

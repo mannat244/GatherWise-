@@ -268,5 +268,28 @@ describe("POST /api/chat Route Handler", () => {
     // Must mention confirmed choice and exact budget status
     expect(data.assistantMessage).toContain("The Grid - Gaming Arena");
     expect(data.assistantMessage).toContain("2,280");
+
+    // Verify observability telemetry
+    expect(data.telemetry).toBeDefined();
+    expect(data.telemetry.model).toBe("gemini-flash-lite-latest");
+    expect(typeof data.telemetry.latencyMs).toBe("number");
+  });
+
+  it("returns full token telemetry and skips search grounding on local constraint edit", async () => {
+    const req = new NextRequest("http://localhost:3000/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "we dont need wheelchair accesibility who said that?" }],
+        currentPlan: SAMPLE_BIRTHDAY_PLAN,
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(data.telemetry).toBeDefined();
+    expect(data.telemetry.model).toBe("gemini-flash-lite-latest");
+    expect(data.telemetry.searchGroundingFired).toBe(false);
   });
 });
