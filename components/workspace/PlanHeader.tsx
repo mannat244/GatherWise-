@@ -14,11 +14,9 @@ import {
   Sparkles,
   Accessibility,
   HeartHandshake,
-  Utensils,
   X,
   Zap,
   Activity,
-  Cpu,
 } from "lucide-react";
 
 interface PlanHeaderProps {
@@ -124,7 +122,11 @@ export function PlanHeader({
                 title="View AI Token Usage & Latency Observability"
               >
                 <Zap className="h-3 w-3 text-indigo-600" />
-                <span>{telemetry.totalTokens.toLocaleString()} tokens</span>
+                <span>
+                  {telemetry.usageAvailable && telemetry.totalTokens != null
+                    ? `${telemetry.totalTokens.toLocaleString()} tokens`
+                    : "Offline Mode"}
+                </span>
                 <span className="text-indigo-400">•</span>
                 <span>{(telemetry.latencyMs / 1000).toFixed(1)}s</span>
                 {telemetry.searchGroundingFired ? (
@@ -410,9 +412,15 @@ export function PlanHeader({
             </div>
             <div className="rounded-lg border border-stone-200 bg-white p-2.5">
               <span className="text-[10px] text-stone-500 uppercase font-semibold">Turn Tokens</span>
-              <p className="mt-1 font-mono font-bold text-indigo-600">{telemetry.totalTokens.toLocaleString()}</p>
+              <p className="mt-1 font-mono font-bold text-indigo-600">
+                {telemetry.usageAvailable && telemetry.totalTokens != null
+                  ? telemetry.totalTokens.toLocaleString()
+                  : "N/A (Unmeasured)"}
+              </p>
               <span className="text-[10px] text-stone-400">
-                {telemetry.promptTokens} in • {telemetry.candidateTokens} out
+                {telemetry.usageAvailable
+                  ? `${telemetry.promptTokens ?? 0} in • ${telemetry.candidateTokens ?? 0} out`
+                  : "Offline Demo"}
               </span>
             </div>
             <div className="rounded-lg border border-stone-200 bg-white p-2.5">
@@ -432,7 +440,11 @@ export function PlanHeader({
             <div className="rounded-lg border border-stone-200 bg-white p-2.5">
               <span className="text-[10px] text-stone-500 uppercase font-semibold">Session Total</span>
               <p className="mt-1 font-mono font-bold text-stone-900">{cumulativeTokens.toLocaleString()}</p>
-              <span className="text-[10px] text-stone-400">est. ${(telemetry.estimatedCostUsd).toFixed(5)}</span>
+              <span className="text-[10px] text-stone-400">
+                {telemetry.estimatedCostUsd != null
+                  ? `est. $${telemetry.estimatedCostUsd.toFixed(5)}`
+                  : "N/A"}
+              </span>
             </div>
           </div>
 
@@ -441,7 +453,7 @@ export function PlanHeader({
             <div>
               <p className="font-semibold">Grounding Strategy Decision:</p>
               <p className="text-[11px] text-indigo-700">{telemetry.searchGroundingReason}</p>
-              {telemetry.toolTokens > 0 && (
+              {(telemetry.toolTokens ?? 0) > 0 && (
                 <p className="mt-1 text-[10px] text-indigo-600 font-mono">
                   Grounding injected {telemetry.toolTokens} search tokens into context.
                 </p>

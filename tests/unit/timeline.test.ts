@@ -24,6 +24,8 @@ describe("Timeline Engine", () => {
         type: "logistics",
         status: "todo",
         priority: "urgent",
+        costBasis: "per_event",
+        currency: "INR",
         dueDate: "2026-10-20", // overdue relative to 2026-10-22
         dependsOn: [],
         options: [],
@@ -37,6 +39,8 @@ describe("Timeline Engine", () => {
         type: "product",
         status: "todo",
         priority: "medium",
+        costBasis: "per_event",
+        currency: "INR",
         dueDate: "2026-10-24",
         dependsOn: [],
         options: [],

@@ -74,6 +74,9 @@ describe("Budget Engine", () => {
           title: "Book Community Hall",
           type: "venue",
           status: "option_selected",
+          priority: "high",
+          costBasis: "per_event",
+          currency: "INR",
           selectedOptionId: "opt-venue-1",
           dependsOn: [],
           options: [
@@ -120,6 +123,7 @@ describe("Budget Engine", () => {
           title: "Venue",
           type: "venue",
           status: "todo",
+          priority: "high",
           estimatedCost: 3500,
           costBasis: "per_event",
           currency: "INR",

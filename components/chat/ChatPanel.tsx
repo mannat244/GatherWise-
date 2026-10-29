@@ -1,18 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Sparkles, AlertCircle, Compass, Clock, Zap } from "lucide-react";
+import { Send, Bot, User, Sparkles, AlertCircle, Compass, Clock } from "lucide-react";
 import { DailyUsageState } from "@/lib/storage/usage-limiter";
+import { ChatMessage } from "@/lib/types/plan";
 
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
-  followUpQuestion?: string;
-  suggestedAnswers?: string[];
-  isGrounded?: boolean;
-}
+export type { ChatMessage };
 
 interface ChatPanelProps {
   messages: ChatMessage[];

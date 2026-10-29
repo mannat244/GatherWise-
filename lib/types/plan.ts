@@ -294,16 +294,31 @@ export const AgentProposalSchema = z.object({
 });
 export type AgentProposal = z.infer<typeof AgentProposalSchema>;
 
+// --- Chat Message Types ---
+export const ChatMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+  timestamp: z.string(),
+  followUpQuestion: z.string().optional(),
+  suggestedAnswers: z.array(z.string()).optional(),
+  isGrounded: z.boolean().optional(),
+});
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
 // --- Observability & Telemetry ---
 export const ChatTelemetrySchema = z.object({
   model: z.string(),
-  promptTokens: z.number().nonnegative().default(0),
-  candidateTokens: z.number().nonnegative().default(0),
-  toolTokens: z.number().nonnegative().default(0),
-  totalTokens: z.number().nonnegative().default(0),
+  promptTokens: z.number().nonnegative().nullable().optional(),
+  candidateTokens: z.number().nonnegative().nullable().optional(),
+  toolTokens: z.number().nonnegative().nullable().optional(),
+  totalTokens: z.number().nonnegative().nullable().optional(),
   latencyMs: z.number().nonnegative().default(0),
   searchGroundingFired: z.boolean().default(false),
   searchGroundingReason: z.string().optional(),
-  estimatedCostUsd: z.number().nonnegative().default(0),
+  estimatedCostUsd: z.number().nonnegative().nullable().optional(),
+  usageAvailable: z.boolean().default(false),
+  executionMode: z.enum(["gemini_api", "offline_demo"]).default("gemini_api"),
+  costEstimationBasis: z.string().optional(),
 });
 export type ChatTelemetry = z.infer<typeof ChatTelemetrySchema>;

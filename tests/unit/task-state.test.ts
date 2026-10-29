@@ -14,6 +14,8 @@ describe("Task State Lifecycle", () => {
     type: "venue",
     status: "todo",
     priority: "high",
+    costBasis: "per_event",
+    currency: "INR",
     dependsOn: [],
     options: [
       {

@@ -26,6 +26,7 @@ describe("Constraint Change & Impact Engine", () => {
         title: "Buffet Lunch",
         type: "food",
         status: "in_progress",
+        priority: "medium",
         estimatedCost: 500,
         costBasis: "per_person",
         currency: "INR",
@@ -40,6 +41,7 @@ describe("Constraint Change & Impact Engine", () => {
         title: "Custom Photo Booth",
         type: "decoration",
         status: "completed",
+        priority: "medium",
         estimatedCost: 2000,
         costBasis: "per_event",
         currency: "INR",
@@ -54,6 +56,10 @@ describe("Constraint Change & Impact Engine", () => {
         title: "Rooftop Terrace",
         type: "venue",
         status: "option_selected",
+        priority: "high",
+        currency: "INR",
+        costBasis: "per_event",
+        dependsOn: [],
         selectedOptionId: "opt-1",
         options: [
           {

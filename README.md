@@ -12,10 +12,11 @@ GatherWise bridges the gap between conversational AI and structured planning. In
 
 1. **Conversational Control Surface, Structured Living Result**: Discuss your event naturally; GatherWise extracts intents, dates, guests, and budgets into structured task items rather than passive text.
 2. **Deterministic Arithmetic**: Budgets, per-person multiplications, contingency reserves, and overage detection are computed exclusively by pure TypeScript code—never delegated to LLM hallucination.
-3. **Google Search Grounding with Honest Provenance**: Real places, venues, and vendors are discovered using live Google Search Grounding via the modern `@google/genai` SDK. Missing prices or ratings are honestly marked unknown rather than fabricated, and official Google Maps directions links are provided for every verified address.
-4. **Constraint-Aware Replanning**: If your guest count shifts from 10 to 20 or your budget drops to ₹4,000, GatherWise recalculates affected items, flags budget impacts, and **strictly preserves completed tasks and user manual edits**.
-5. **Final Event Hub & Export**: Transition smoothly from planning to execution with an editable invitation generator, native Web Share API (`navigator.share`), one-click Markdown download, and print-to-PDF layout (`@media print`).
-6. **Graceful Offline Fallback**: Works with a Gemini API key for live search grounding and AI reasoning, or seamlessly in deterministic offline copilot mode with zero configuration so evaluators can inspect every feature immediately.
+3. **Google Search Grounding with Honest Provenance**: Real places, venues, and transit options are discovered using live Google Search Grounding via the official `@google/genai` SDK. Missing details are marked as estimates rather than fabricated, and official Google Maps directions links are provided for every verified address.
+4. **Accurate Option-Level Grounding Attribution**: Every proposed option is independently verified against candidate search sources by token and domain matching. Only places with matching citations are marked `verified_source`; unmatched options are labeled `estimate` with live verification pending.
+5. **Constraint-Aware Replanning**: If your guest count shifts from 10 to 20 or your budget drops to ₹4,000, GatherWise recalculates affected items, flags budget impacts, and **strictly preserves completed tasks and user manual edits**.
+6. **Final Event Hub & Export**: Transition smoothly from planning to execution with an editable invitation generator, native Web Share API (`navigator.share`), one-click Markdown download, and print-to-PDF layout (`@media print`).
+7. **Graceful Offline Fallback & Explicit Sample Mode**: Works with a Gemini API key for live search grounding and AI reasoning, or seamlessly in deterministic offline copilot mode with zero configuration. Offline samples are visibly labeled so evaluators can inspect every feature immediately.
 
 ---
 
@@ -30,7 +31,7 @@ GatherWise bridges the gap between conversational AI and structured planning. In
 │  │ - Conversation stream   │  │ - Plan Header & Constraints          │ │
 │  │ - Clarification chips   │  │ - Deterministic Budget Bar           │ │
 │  │ - Grounding indicators  │  │ - Categorized Task Checklist         │ │
-│  │                         │  │ - Option Drawer (Citations/Links)    │ │
+│  │ - Pacing cooldown badge │  │ - Option Drawer (Citations/Links)    │ │
 │  │                         │  │ - Final Event Hub & Invitation Preview││
 │  └────────────▲────────────┘  └──────────────────▲───────────────────┘ │
 │               │                                  │                     │
@@ -46,30 +47,34 @@ GatherWise bridges the gap between conversational AI and structured planning. In
 ┌────────────────────────────────────────────────────────────────────────┐
 │                      SERVER (Next.js Route Handler)                    │
 │                                                                        │
-│  1. Request Validation (Zod Schema)                                    │
-│  2. Prompt Assembly (System Rules + Known Constraints + History)       │
-│  3. Gemini Client Call (@google/genai)                                 │
-│     ├── Google Search Grounding (tools: [{ googleSearch: {} }])        │
-│     └── Response Extraction (Text + Grounding Metadata + Citations)   │
-│  4. Proposal Parsing & Zod Validation (AgentProposal Action Union)     │
-│  5. Planning Domain Engine (Pure TypeScript):                          │
-│     ├── Task State Transition Validator                                │
-│     ├── Deterministic Budget Reconciler (Committed / Estimated)        │
-│     ├── Date & Lead-Time Checker                                       │
-│     └── Constraint-Change Impact Analyzer (Preserves User Edits)      │
-│  6. Response Formulation (Assistant Message + Validated Plan + Diff)   │
+│  1. Request & Payload Bounds (Zod Schema Validation)                  │
+│  2. Server-Derived Rate Limiting (15 RPM / 4s cooldown pacing)         │
+│  3. Deterministic Tool Gating & System Prompt Directive:               │
+│     ├── Discovery Queries -> Google Search Grounding Tool ACTIVE       │
+│     └── Local Planning/Budget Queries -> Search Gated, Pure Arithmetic │
+│  4. Gemini Model Execution (@google/genai SDK):                        │
+│     ├── Candidate & Grounding Metadata Extraction                      │
+│     └── Observability Telemetry (latency, token counts, cost estimate) │
+│  5. Proposal Parsing & Fallback Action Sanitization (Zod SafeParse)    │
+│  6. Domain Execution Engines (Pure TypeScript Modules):               │
+│     ├── lib/planning/proposal-actions.ts (Deterministic State Updates) │
+│     ├── lib/planning/budget.ts (Committed vs Estimated Calculations)   │
+│     ├── lib/planning/change-impact.ts (Constraint Sensitivity Analysis)│
+│     ├── lib/planning/plan-factory.ts (Clean Entity Initialization)     │
+│     └── lib/planning/offline-copilot.ts (Sample Mode Fallback)         │
+│  7. Response Formulation (Message + Validated Plan + Budget + Telemetry)│
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Framework**: Next.js 15 (App Router, React 19)
-- **Language**: TypeScript 5 with strict type safety
+- **Language**: TypeScript 5 with strict compiler verification (`tsc --noEmit`)
 - **Styling**: Tailwind CSS with custom palette and dedicated `@media print` rules
 - **AI SDK**: Official `@google/genai` (v2.30.0) with Google Search Grounding
 - **Default AI Model**: `gemini-3.5-flash-lite` (Free Tier: 15 RPM, 500 RPD, 250k TPM)
 - **Rate Limit & Quota Protection**: Client & server 4s message cooldown pacing (15 RPM) and 500 RPD daily request counter
-- **AI Observability**: Live token telemetry (prompt, candidate, grounding search tokens) and round-trip latency inspector
-- **Validation**: Zod (runtime validation on all API and state boundaries)
-- **Testing**: Vitest (pure unit tests and integration tests)
+- **AI Observability**: Live token telemetry (prompt, candidate, grounding search tokens), round-trip latency, and transparent `null`/`unmeasured` status handling
+- **Validation**: Zod (runtime validation on all API requests, responses, and localStorage state)
+- **Testing**: Vitest (50 automated unit and integration tests across 9 suites)
 - **Icons**: Lucide React
 
 ---
@@ -82,7 +87,7 @@ GatherWise bridges the gap between conversational AI and structured planning. In
 
 ### 2. Clone and Install
 ```bash
-git clone <repository-url>
+git clone https://github.com/mannat244/GatherWise-.git
 cd gatherwise
 pnpm install
 ```
@@ -97,7 +102,7 @@ Edit `.env.local` to provide your Gemini API key:
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-3.5-flash-lite
 ```
-> *Note: If `GEMINI_API_KEY` is not provided, GatherWise automatically runs in deterministic offline copilot mode, allowing full inspection of the checklist, budget bar, replanning, and export features.*
+> *Note: If `GEMINI_API_KEY` is not provided, GatherWise automatically runs in deterministic offline copilot mode, allowing full inspection of the checklist, budget bar, replanning, and export features without an API key.*
 
 ### 4. Run Development Server
 ```bash
@@ -105,16 +110,29 @@ pnpm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### 5. Run Unit & Integration Tests
+### 5. Run Type Check & Verification Suite
+```bash
+pnpm run type-check
+```
+Executes `tsc --noEmit` to verify type safety across all components, API routes, domain engines, and test mocks with zero compilation errors.
+
+### 6. Run Unit & Integration Tests
 ```bash
 pnpm test
 ```
-Runs all 44 automated unit and integration tests verifying budget math, task transitions, grounding extraction, rate limit cooldowns, and daily usage tracking.
+Executes all **50 automated unit and integration tests** verifying:
+- Deterministic budget calculations & per-person scaling
+- Task state machine transitions & provenance tracking
+- Option-level grounding source matching & honest estimate fallbacks
+- Model parser edge cases (malformed JSON, unknown actions, missing fields)
+- Rate limit cooldown enforcement & daily quota management
+- Chat API route integration & offline fallback orchestration
 
-### 6. Production Build
+### 7. Production Build
 ```bash
 pnpm run build
 ```
+Creates an optimized production build validating static pages, dynamic server handlers, and build traces.
 
 ---
 
@@ -130,13 +148,13 @@ Follow this sequence to evaluate the complete end-to-end user journey:
    - Observe the live workspace: Venue, Cake, Snacks, and Logistics tasks are populated with estimated costs.
    - The stacked budget bar shows committed spend, estimated spend, and contingency reserve.
 3. **Inspect Grounded Places**:
-   - In the "Choose Birthday Venue / Cafe" task, click **2 options**.
+   - In the "Choose Birthday Venue / Cafe" task, click **options**.
    - Review the verified option cards:
      - Notice the **Verified Source** badge.
      - Click **Directions** to open the real Google Maps destination link.
      - Click **View Source** to see source attribution.
 4. **Make a Decision**:
-   - Click **Choose this Option** on *"The Living Room Cafe"*.
+   - Click **Choose this Option** on a venue.
    - Watch the task transition to `Selected for Plan`, and observe the budget bar dynamically promote estimated spend into committed spend.
 5. **Test Constraint-Aware Replanning**:
    - In the chat panel or via **Adjust Constraints**, type or select:
@@ -153,10 +171,11 @@ Follow this sequence to evaluate the complete end-to-end user journey:
 ## 🛡️ Hackathon Submission Verification
 
 - **Branch Count**: Exactly one branch (`main`).
-- **Repository Size Budget**: < 1 MB (Verified with `git count-objects -vH`; strict `.gitignore` excludes `.next/`, `node_modules/`, caches, and media bloat).
-- **Security & Secret Protection**: All Gemini API calls run server-side via Next.js Route Handlers. `.env.local` is ignored and zero credentials are committed to Git.
-- **Test Coverage**: 44 tests passing across 9 suites (`pnpm test`).
-- **Reproducible Build**: Clean static and dynamic route compilation with zero errors (`pnpm run build`).
+- **Repository Size**: ~274 KiB (verified with `git count-objects -vH`, strictly under the 10 MB limit).
+- **Security & Secret Protection**: All Gemini API calls run server-side via Next.js Route Handlers. `.env.local` is ignored and zero credentials are committed to Git. Cooldown bypass is locked in production, and client identifiers are derived securely from server headers.
+- **Strict Code Quality & Boundaries**: Decoupled domain engines (`lib/planning/`) from UI components and API handlers. Schema-validated action application with zero unsafe `any` assertions in core paths.
+- **Test Coverage**: 50 tests passing across 9 test suites (`pnpm test`).
+- **Reproducible Build**: Clean compilation with `tsc --noEmit` and `next build`.
 
 ---
 

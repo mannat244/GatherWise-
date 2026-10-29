@@ -1,5 +1,4 @@
-import { EventPlan, EventPlanSchema } from "@/lib/types/plan";
-import { ChatMessage } from "@/components/chat/ChatPanel";
+import { EventPlan, EventPlanSchema, ChatMessage, ChatMessageSchema } from "@/lib/types/plan";
 import { z } from "zod";
 
 export const STORAGE_KEY_V1 = "gatherwise_plan_v1";
@@ -7,19 +6,7 @@ export const STORAGE_KEY_V1 = "gatherwise_plan_v1";
 export const StoredEnvelopeSchema = z.object({
   schemaVersion: z.literal(1),
   plan: EventPlanSchema,
-  messages: z
-    .array(
-      z.object({
-        id: z.string(),
-        role: z.enum(["user", "assistant"]),
-        content: z.string(),
-        timestamp: z.string(),
-        followUpQuestion: z.string().optional(),
-        suggestedAnswers: z.array(z.string()).optional(),
-        isGrounded: z.boolean().optional(),
-      })
-    )
-    .optional(),
+  messages: z.array(ChatMessageSchema).optional(),
   savedAt: z.string(),
 });
 export type StoredEnvelope = z.infer<typeof StoredEnvelopeSchema>;
@@ -71,7 +58,7 @@ export function loadPlanLocally(): { plan: EventPlan; messages?: ChatMessage[] }
 
     return {
       plan: result.data.plan,
-      messages: result.data.messages as ChatMessage[] | undefined,
+      messages: result.data.messages,
     };
   } catch (error) {
     console.warn("Failed to load plan from localStorage:", error);

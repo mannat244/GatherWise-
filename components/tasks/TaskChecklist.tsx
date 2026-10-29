@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { PlanningTask, TaskStatus, TaskType } from "@/lib/types/plan";
 import { TaskCard } from "./TaskCard";
-import { Plus, CheckCircle2, ListFilter } from "lucide-react";
+import { Plus } from "lucide-react";
 
 interface TaskChecklistProps {
   tasks: PlanningTask[];

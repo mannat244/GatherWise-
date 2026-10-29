@@ -182,4 +182,81 @@ Direct cab ride. Estimated cost ₹700 to ₹1000 for the ride.`;
       expect(optionsAction.options[0].category).toBe("activity");
     }
   });
+
+  it("handles malformed JSON with trailing commas and syntax errors gracefully without crashing", () => {
+    const malformed = `\`\`\`json
+{
+  "assistantMessage": "Here are recommendations",
+  "intent": "search",
+  "actions": [
+    {
+      "type": "propose_options",
+      "taskType": "venue",
+      "options": [{ "name": "Truffles" }],
+    },
+  ],
+}
+\`\`\``;
+
+    const result = parseModelResponseIntelligently(malformed, dummyPlan, dummyGrounding);
+    expect(result.assistantMessage).toBeDefined();
+    expect(result.intent).toBeDefined();
+    expect(result.actions).toBeInstanceOf(Array);
+  });
+
+  it("safely filters out unknown or malicious action types from model output", () => {
+    const dangerousPayload = `\`\`\`json
+{
+  "assistantMessage": "Processed plan",
+  "intent": "plan",
+  "actions": [
+    {
+      "type": "illegal_remote_action",
+      "command": "rm -rf /"
+    },
+    {
+      "type": "propose_constraint_change",
+      "patch": { "guestCount": 8 }
+    }
+  ]
+}
+\`\`\``;
+
+    const result = parseModelResponseIntelligently(dangerousPayload, dummyPlan, dummyGrounding);
+    // The illegal action should be strictly filtered out by schema validation
+    expect(result.actions.some((a: any) => a.type === "illegal_remote_action")).toBe(false);
+    expect(result.actions.some((a) => a.type === "propose_constraint_change")).toBe(true);
+  });
+
+  it("safely sanitizes task actions with missing required fields", () => {
+    const invalidTaskPayload = `\`\`\`json
+{
+  "assistantMessage": "Tasks proposed",
+  "intent": "plan",
+  "actions": [
+    {
+      "type": "upsert_task",
+      "task": {
+        "title": "Valid Task",
+        "type": "venue"
+      }
+    },
+    {
+      "type": "upsert_task",
+      "task": {
+        "invalidKeyWithoutTitle": true
+      }
+    }
+  ]
+}
+\`\`\``;
+
+    const result = parseModelResponseIntelligently(invalidTaskPayload, dummyPlan, dummyGrounding);
+    // Only the valid task action should survive validation
+    const upsertActions = result.actions.filter((a) => a.type === "upsert_task");
+    expect(upsertActions.length).toBe(1);
+    if (upsertActions[0] && upsertActions[0].type === "upsert_task") {
+      expect(upsertActions[0].task.title).toBe("Valid Task");
+    }
+  });
 });

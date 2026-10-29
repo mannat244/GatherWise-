@@ -1,4 +1,4 @@
-import { PlanningOption, Provenance, ProposedOption } from "@/lib/types/plan";
+import { PlanningOption, Provenance, ProposedOption, EventPlan } from "@/lib/types/plan";
 
 export interface GroundingSource {
   title: string;
@@ -50,20 +50,66 @@ export function buildGoogleMapsUrl(placeName: string, location?: string): string
 }
 
 /**
+ * Matches an individual option against candidate grounding sources.
+ * Looks for URL matches, or presence of option name keywords in source title / URL.
+ */
+export function findMatchingGroundingSource(
+  optionName: string,
+  optionSourceUrl: string | undefined,
+  sources: GroundingSource[]
+): GroundingSource | undefined {
+  if (!sources || sources.length === 0) return undefined;
+
+  // 1. Direct URL or domain match
+  if (optionSourceUrl) {
+    const directMatch = sources.find(
+      (s) => s.url === optionSourceUrl || (s.domain && optionSourceUrl.includes(s.domain))
+    );
+    if (directMatch) return directMatch;
+  }
+
+  // 2. Name token match in source title or URL (excluding generic stop words)
+  const STOP_WORDS = new Set([
+    "the", "and", "for", "with", "cafe", "coffee", "restaurant", "arena", "bowling",
+    "gaming", "games", "bangalore", "bengaluru", "india", "place", "food", "bar",
+    "hotel", "center", "centre", "mall", "shuttle", "bus", "metro", "cab"
+  ]);
+
+  const cleanName = optionName.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+  const nameTokens = cleanName.split(/\s+/).filter((t) => t.length > 2 && !STOP_WORDS.has(t));
+  if (nameTokens.length === 0) return undefined;
+
+  return sources.find((s) => {
+    const titleLower = s.title.toLowerCase();
+    const urlLower = s.url.toLowerCase();
+    return nameTokens.some((token) => titleLower.includes(token) || urlLower.includes(token));
+  });
+}
+
+/**
  * Normalizes a proposed place into a typed PlanningOption with honest provenance.
  */
 export function normalizeGroundedOption(
   rawOption: (Partial<PlanningOption> | ProposedOption) & { name: string },
   contextLocation?: string,
-  sourceUrl?: string
+  sourceOrUrl?: string | GroundingSource
 ): PlanningOption {
+  const matchedSource = typeof sourceOrUrl === "object" ? sourceOrUrl : undefined;
+  const directUrl = typeof sourceOrUrl === "string" ? sourceOrUrl : matchedSource?.url;
+
+  const isVerified = Boolean(matchedSource || (directUrl && directUrl !== "https://www.google.com"));
+  const finalSourceUrl = directUrl || rawOption.sourceUrl || "https://www.google.com";
+  const sourceName = matchedSource?.title || (isVerified ? "Google Search Grounding" : "AI Estimate");
+
   const provenance: Provenance[] = [
     {
-      kind: sourceUrl ? "verified_source" : "estimate",
-      sourceName: "Google Search Grounding",
-      sourceUrl: sourceUrl || undefined,
+      kind: isVerified ? "verified_source" : "estimate",
+      sourceName,
+      sourceUrl: isVerified ? finalSourceUrl : undefined,
       retrievedAt: new Date().toISOString(),
-      note: "Place discovered and verified via search grounding.",
+      note: isVerified
+        ? `Option discovered and verified via search source: ${sourceName}`
+        : "Estimated option proposed by assistant; live verification pending.",
     },
   ];
 
@@ -75,7 +121,7 @@ export function normalizeGroundedOption(
     name: rawOption.name,
     description: rawOption.description,
     category: rawOption.category || "venue",
-    status: "suggested",
+    status: ("status" in rawOption && rawOption.status) ? rawOption.status : "suggested",
     imageUrl: rawOption.imageUrl,
     location: {
       address,
@@ -101,7 +147,7 @@ export function normalizeGroundedOption(
             sourceName: rawOption.rating.sourceName || "Google",
           }
         : undefined,
-    sourceUrl: rawOption.sourceUrl || sourceUrl || "https://www.google.com",
+    sourceUrl: finalSourceUrl,
     bookingUrl: rawOption.bookingUrl,
     provenance,
     fitReasons: rawOption.fitReasons || [],
@@ -109,3 +155,46 @@ export function normalizeGroundedOption(
     lastCheckedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Deterministic Server-Side Tool Gating:
+ * Only enables Google Search Grounding when real-world external discovery is requested.
+ * Prevents wasting search tokens & quota on local constraint edits or budget inquiries.
+ */
+export function shouldTriggerSearchGrounding(userMessage: string, currentPlan: EventPlan): boolean {
+  const lower = userMessage.toLowerCase().trim();
+
+  // Pure conversational greetings or meta-questions without event context should NOT trigger search
+  if (/^(hi|hello|hey|greetings|good\s*(morning|afternoon|evening)|who\s*are\s*you|what\s*can\s*you\s*do)[\s!.,?]*$/i.test(lower)) {
+    return false;
+  }
+
+  // Internal inquiries: NEVER call Google Search
+  if (
+    (lower.includes("wheelchair") && (lower.includes("dont") || lower.includes("don't") || lower.includes("no") || lower.includes("remove") || lower.includes("who said"))) ||
+    (lower.includes("dietary") && (lower.includes("remove") || lower.includes("no"))) ||
+    (lower.includes("cost") && !lower.includes("options")) ||
+    (lower.includes("what was our") || lower.includes("what is our")) ||
+    (lower.includes("budget") && (lower.includes("remaining") || lower.includes("total") || lower.includes("spent"))) ||
+    lower.includes("did you forget") ||
+    lower.includes("did u forget") ||
+    lower.includes("update the plan") ||
+    lower.includes("view hub")
+  ) {
+    return false;
+  }
+
+  // Discovery keywords where search grounding is genuinely needed
+  const discoveryKeywords = [
+    "venue", "cafe", "restaurant", "place", "spot", "dinner", "lunch", "food",
+    "burger", "pizza", "fast food", "bowling", "arcade", "mall", "travel", "cab",
+    "uber", "ola", "bus", "metro", "auto", "cake", "bakery", "options", "suggest",
+    "find", "recommend", "where can", "look for"
+  ];
+
+  const hasDiscovery = discoveryKeywords.some((kw) => lower.includes(kw));
+  const hasNoOptionsYet = currentPlan.tasks.length === 0 || !currentPlan.tasks.some((t) => t.options.length > 0);
+
+  return hasDiscovery || hasNoOptionsYet;
+}
+

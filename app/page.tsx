@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { EventPlan, TaskStatus, TaskType, PlanningTask, ChatTelemetry } from "@/lib/types/plan";
+import { EventPlan, TaskStatus, TaskType, PlanningTask, ChatTelemetry, ChatMessage } from "@/lib/types/plan";
 import { SAMPLE_BIRTHDAY_PLAN } from "@/lib/storage/mock-data";
 import { calculateBudgetSummary } from "@/lib/planning/budget";
 import { selectTaskOption, transitionTaskStatus } from "@/lib/planning/task-state";
@@ -16,38 +16,16 @@ import { LandingHero } from "@/components/landing/LandingHero";
 import { PlanHeader } from "@/components/workspace/PlanHeader";
 import { BudgetBar } from "@/components/workspace/BudgetBar";
 import { TaskChecklist } from "@/components/tasks/TaskChecklist";
-import { ChatPanel, ChatMessage } from "@/components/chat/ChatPanel";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { FinalHubView } from "@/components/hub/FinalHubView";
-import { RotateCcw, PartyPopper, Sparkles, AlertCircle } from "lucide-react";
+import { RotateCcw, PartyPopper, Sparkles } from "lucide-react";
 import {
   getDailyUsage,
   incrementDailyUsage,
   DailyUsageState,
   FREE_TIER_CONFIG,
 } from "@/lib/storage/usage-limiter";
-
-function createCleanEventPlan(title: string = "New Event"): EventPlan {
-  return {
-    id: `plan-${Date.now()}`,
-    version: 1,
-    title,
-    timezone:
-      typeof Intl !== "undefined"
-        ? Intl.DateTimeFormat().resolvedOptions().timeZone
-        : "Asia/Kolkata",
-    constraints: {
-      currency: "INR",
-      contingencyPercent: 10,
-      dietaryNeeds: [],
-      accessibilityNeeds: [],
-      preferences: [],
-      exclusions: [],
-    },
-    tasks: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-}
+import { createCleanEventPlan } from "@/lib/planning/plan-factory";
 
 export default function Home() {
   const [hasStarted, setHasStarted] = useState(false);

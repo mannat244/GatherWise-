@@ -3,7 +3,10 @@ import {
   extractGroundingMetadata,
   buildGoogleMapsUrl,
   normalizeGroundedOption,
+  findMatchingGroundingSource,
+  shouldTriggerSearchGrounding,
 } from "@/lib/gemini/grounding";
+import { EventPlan } from "@/lib/types/plan";
 
 describe("Grounding Adapter", () => {
   it("extracts search queries and web citations from candidate groundingMetadata", () => {
@@ -76,5 +79,69 @@ describe("Grounding Adapter", () => {
     expect(normalized.location?.directionsUrl).toBeDefined();
     expect(normalized.provenance[0].kind).toBe("verified_source");
     expect(normalized.provenance[0].sourceUrl).toBe("https://example.com/dyu-cafe");
+  });
+
+  it("labels option provenance as estimate when no verified search source matches", () => {
+    const unverified = normalizeGroundedOption(
+      {
+        name: "Generic Mystery Cafe",
+        description: "Cozy cafe with warm lights",
+      },
+      "Bengaluru"
+    );
+
+    expect(unverified.name).toBe("Generic Mystery Cafe");
+    expect(unverified.provenance[0].kind).toBe("estimate");
+    expect(unverified.provenance[0].note).toContain("live verification pending");
+  });
+
+  it("accurately matches individual options to specific grounding sources", () => {
+    const sources = [
+      { title: "Truffles Burger Joint Bangalore", url: "https://truffles.co.in", domain: "truffles.co.in" },
+      { title: "The Grid Gaming and Bowling Arena", url: "https://thegrid.in", domain: "thegrid.in" },
+    ];
+
+    const matchTruffles = findMatchingGroundingSource("Truffles Koramangala", undefined, sources);
+    expect(matchTruffles?.url).toBe("https://truffles.co.in");
+
+    const matchGrid = findMatchingGroundingSource("The Grid - Gaming Arena", undefined, sources);
+    expect(matchGrid?.url).toBe("https://thegrid.in");
+
+    const noMatch = findMatchingGroundingSource("Amoeba Bowling", undefined, sources);
+    expect(noMatch).toBeUndefined();
+  });
+
+  it("shouldTriggerSearchGrounding suppresses search on pure greetings and budget inquiries", () => {
+    const mockPlan: EventPlan = {
+      id: "plan-1",
+      version: 1,
+      title: "Birthday",
+      timezone: "Asia/Kolkata",
+      constraints: {
+        currency: "INR",
+        contingencyPercent: 10,
+        dietaryNeeds: [],
+        accessibilityNeeds: [],
+        preferences: [],
+        exclusions: [],
+      },
+      tasks: [],
+      createdAt: "2026-10-22T10:00:00Z",
+      updatedAt: "2026-10-22T10:00:00Z",
+    };
+
+    // Greetings: should NOT trigger search
+    expect(shouldTriggerSearchGrounding("Hello", mockPlan)).toBe(false);
+    expect(shouldTriggerSearchGrounding("Hi!", mockPlan)).toBe(false);
+    expect(shouldTriggerSearchGrounding("good morning", mockPlan)).toBe(false);
+
+    // Budget inquiries: should NOT trigger search
+    expect(shouldTriggerSearchGrounding("what is our remaining budget?", mockPlan)).toBe(false);
+    expect(shouldTriggerSearchGrounding("how much total cost?", mockPlan)).toBe(false);
+
+    // Discovery / Event Briefs: MUST trigger search
+    expect(shouldTriggerSearchGrounding("find top fast-food burger places in Koramangala", mockPlan)).toBe(true);
+    expect(shouldTriggerSearchGrounding("suggest bowling and entertainment spots", mockPlan)).toBe(true);
+    expect(shouldTriggerSearchGrounding("what are travel options from Electronic City?", mockPlan)).toBe(true);
   });
 });

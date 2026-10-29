@@ -1,10 +1,25 @@
 import {
+  AgentAction,
+  AgentActionSchema,
   AgentProposal,
   AgentProposalSchema,
   EventPlan,
+  ProposedOption,
   TaskType,
 } from "@/lib/types/plan";
 import { GroundingExtraction, buildGoogleMapsUrl } from "./grounding";
+
+function sanitizeFallbackActions(actionsRaw: unknown): AgentAction[] {
+  if (!Array.isArray(actionsRaw)) return [];
+  const validActions: AgentAction[] = [];
+  for (const item of actionsRaw) {
+    const res = AgentActionSchema.safeParse(item);
+    if (res.success) {
+      validActions.push(res.data);
+    }
+  }
+  return validActions;
+}
 
 /**
  * Robustly parses model output whether it returns pure JSON, markdown-fenced JSON,
@@ -34,7 +49,7 @@ export function parseModelResponseIntelligently(
           intent: parsed.intent || "plan",
           followUpQuestion: parsed.followUpQuestion,
           suggestedAnswers: parsed.suggestedAnswers || [],
-          actions: Array.isArray(parsed.actions) ? (parsed.actions as any) : [],
+          actions: sanitizeFallbackActions(parsed.actions),
           sourceNotes: parsed.sourceNotes || [],
         };
       }
@@ -61,7 +76,7 @@ export function parseModelResponseIntelligently(
           intent: parsed.intent || "plan",
           followUpQuestion: parsed.followUpQuestion,
           suggestedAnswers: parsed.suggestedAnswers || [],
-          actions: Array.isArray(parsed.actions) ? (parsed.actions as any) : [],
+          actions: sanitizeFallbackActions(parsed.actions),
           sourceNotes: parsed.sourceNotes || [],
         };
       }
@@ -83,8 +98,17 @@ function extractProposalFromProse(
   groundingData: GroundingExtraction
 ): AgentProposal {
   const lower = text.toLowerCase();
-  const actions: any[] = [];
-  const patch: any = {};
+  const actions: AgentAction[] = [];
+  const patch: {
+    guestCount?: number;
+    budgetAmount?: number;
+    currency?: string;
+    date?: string;
+    location?: string;
+    dietaryNeeds?: string[];
+    accessibilityNeeds?: string[];
+    preferences?: string[];
+  } = {};
 
   // 1. Detect clearing of unneeded constraints (e.g., wheelchair)
   if (
@@ -310,7 +334,7 @@ function extractProposalFromProse(
     }
 
     const effectiveLocation = patch.location || currentPlan.location || "Bengaluru";
-    const mappedOptions = items.map((item, idx) => {
+    const mappedOptions: ProposedOption[] = items.map((item, idx): ProposedOption => {
       const matchedSourceUrl =
         groundingData.sources[idx]?.url || groundingData.sources[0]?.url;
 
