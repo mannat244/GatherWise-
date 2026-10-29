@@ -71,10 +71,14 @@ export async function POST(req: NextRequest) {
     if (!bypassCooldown) {
       const cooldownCheck = checkCooldownRateLimit(clientId);
       if (!cooldownCheck.allowed) {
+        const isDaily = cooldownCheck.reason === "daily_limit";
         return NextResponse.json(
           {
             error: "Rate limit exceeded",
-            message: `Free Tier Cooldown: Please wait ${cooldownCheck.retryAfterSeconds}s between requests to respect the 15 RPM limit on ${DEFAULT_GEMINI_MODEL}.`,
+            reason: isDaily ? "daily_limit_exceeded" : "cooldown_active",
+            message: isDaily
+              ? `Daily Free Tier Limit Reached: 500 requests per day limit reached for ${DEFAULT_GEMINI_MODEL}. Resets at 00:00 UTC.`
+              : `Free Tier Cooldown: Please wait ${cooldownCheck.retryAfterSeconds}s between requests to respect the 15 RPM limit on ${DEFAULT_GEMINI_MODEL}.`,
             retryAfter: cooldownCheck.retryAfterSeconds,
             rateLimit: {
               model: DEFAULT_GEMINI_MODEL,
@@ -197,11 +201,12 @@ export async function POST(req: NextRequest) {
             );
             telemetry.searchGroundingReason =
               "Search Grounding quota exhausted (429); gracefully degraded to direct generation";
+            const fallbackInstruction = buildSystemInstruction(currentPlan, clientContext, false);
             response = (await gemini.models.generateContent({
               model: DEFAULT_GEMINI_MODEL,
               contents: promptText,
               config: {
-                systemInstruction,
+                systemInstruction: fallbackInstruction,
                 temperature: 0.2,
               },
             })) as unknown as GenerateResponse;
@@ -215,14 +220,17 @@ export async function POST(req: NextRequest) {
         // Observability Metrics Extraction
         const latency = Date.now() - startTime;
         const usage = response.usageMetadata;
-        if (usage) {
+        const promptTokens = typeof usage?.promptTokenCount === "number" ? usage.promptTokenCount : null;
+        const candidateTokens = typeof usage?.candidatesTokenCount === "number" ? usage.candidatesTokenCount : null;
+        const toolTokens = typeof usage?.toolUsePromptTokenCount === "number" ? usage.toolUsePromptTokenCount : null;
+        const totalTokens = typeof usage?.totalTokenCount === "number" ? usage.totalTokenCount : null;
+
+        if (promptTokens !== null && candidateTokens !== null) {
           telemetry.usageAvailable = true;
-          telemetry.promptTokens = usage.promptTokenCount ?? 0;
-          telemetry.candidateTokens = usage.candidatesTokenCount ?? 0;
-          telemetry.toolTokens =
-            typeof usage.toolUsePromptTokenCount === "number" ? usage.toolUsePromptTokenCount : 0;
-          telemetry.totalTokens =
-            usage.totalTokenCount ?? (telemetry.promptTokens + telemetry.candidateTokens + telemetry.toolTokens);
+          telemetry.promptTokens = promptTokens;
+          telemetry.candidateTokens = candidateTokens;
+          telemetry.toolTokens = toolTokens ?? 0;
+          telemetry.totalTokens = totalTokens ?? (promptTokens + candidateTokens + (toolTokens ?? 0));
 
           const configuredTier = (process.env.GEMINI_BILLING_TIER === "paid" ? "paid" : "free") as "free" | "paid";
           const costResult = calculateTokenCost({
@@ -237,6 +245,10 @@ export async function POST(req: NextRequest) {
           telemetry.costEstimationBasis = costResult.pricingBasis;
         } else {
           telemetry.usageAvailable = false;
+          telemetry.promptTokens = null;
+          telemetry.candidateTokens = null;
+          telemetry.toolTokens = null;
+          telemetry.totalTokens = null;
           telemetry.estimatedCostUsd = null;
           telemetry.costEstimationBasis = "Usage metadata not observed from model response";
         }

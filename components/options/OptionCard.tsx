@@ -203,6 +203,7 @@ export function OptionCard({
         <button
           type="button"
           onClick={() => onSelect(option.id)}
+          aria-label={isSelected ? `Selected option: ${option.name}` : `Select option: ${option.name}`}
           className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
             isSelected
               ? "bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-600"

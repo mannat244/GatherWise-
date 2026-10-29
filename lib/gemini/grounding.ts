@@ -12,11 +12,27 @@ export interface GroundingExtraction {
   sources: GroundingSource[];
 }
 
+export interface GeminiResponseLike {
+  candidates?: Array<{
+    groundingMetadata?: {
+      webSearchQueries?: string[];
+      groundingChunks?: Array<{
+        web?: {
+          uri?: string;
+          title?: string;
+          domain?: string;
+        };
+      }>;
+    };
+  }>;
+}
+
 /**
  * Extracts grounding metadata and verifiable web citations from a Gemini response.
  */
-export function extractGroundingMetadata(response: any): GroundingExtraction {
-  const candidate = response?.candidates?.[0];
+export function extractGroundingMetadata(response: GeminiResponseLike | unknown): GroundingExtraction {
+  const res = response as GeminiResponseLike | null | undefined;
+  const candidate = res?.candidates?.[0];
   const metadata = candidate?.groundingMetadata;
 
   const searchQueries: string[] = metadata?.webSearchQueries || [];
@@ -95,7 +111,11 @@ export function normalizeGroundedOption(
   sourceOrUrl?: string | GroundingSource
 ): PlanningOption {
   // 1. If rawOption is already a normalized PlanningOption with provenance, preserve it completely!
-  if ("provenance" in rawOption && Array.isArray((rawOption as any).provenance) && (rawOption as any).provenance.length > 0) {
+  if (
+    "provenance" in rawOption &&
+    Array.isArray((rawOption as { provenance?: unknown }).provenance) &&
+    ((rawOption as { provenance: unknown[] }).provenance.length > 0)
+  ) {
     const existing = rawOption as PlanningOption;
     return {
       ...existing,

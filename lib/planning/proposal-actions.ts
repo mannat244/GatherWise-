@@ -104,7 +104,11 @@ export function applyProposalActions(
 
       // Preserve already-normalized options and their verified provenance intact
       const normalizedOptions: PlanningOption[] = action.options.map((opt) => {
-        if ("provenance" in opt && Array.isArray((opt as any).provenance) && (opt as any).provenance.length > 0) {
+        if (
+          "provenance" in opt &&
+          Array.isArray((opt as { provenance?: unknown }).provenance) &&
+          ((opt as { provenance: unknown[] }).provenance.length > 0)
+        ) {
           return opt as PlanningOption;
         }
         return normalizeGroundedOption(opt, current.location);

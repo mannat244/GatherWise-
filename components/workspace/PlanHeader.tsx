@@ -271,10 +271,11 @@ export function PlanHeader({
 
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div>
-              <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+              <label htmlFor="constraint-guests" className="block text-[11px] font-semibold text-stone-700 mb-1">
                 Guest Count
               </label>
               <input
+                id="constraint-guests"
                 type="number"
                 value={guests}
                 onChange={(e) => setGuests(e.target.value)}
@@ -283,10 +284,11 @@ export function PlanHeader({
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+              <label htmlFor="constraint-budget" className="block text-[11px] font-semibold text-stone-700 mb-1">
                 Total Budget ({plan.constraints.currency})
               </label>
               <input
+                id="constraint-budget"
                 type="number"
                 value={budget}
                 onChange={(e) => setBudget(e.target.value)}
@@ -295,10 +297,11 @@ export function PlanHeader({
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+              <label htmlFor="constraint-date" className="block text-[11px] font-semibold text-stone-700 mb-1">
                 Event Date
               </label>
               <input
+                id="constraint-date"
                 type="date"
                 value={eventDate}
                 onChange={(e) => setEventDate(e.target.value)}
@@ -306,10 +309,11 @@ export function PlanHeader({
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+              <label htmlFor="constraint-location" className="block text-[11px] font-semibold text-stone-700 mb-1">
                 Location
               </label>
               <input
+                id="constraint-location"
                 type="text"
                 value={loc}
                 onChange={(e) => setLoc(e.target.value)}
@@ -321,10 +325,11 @@ export function PlanHeader({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
             <div>
-              <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+              <label htmlFor="constraint-preferences" className="block text-[11px] font-semibold text-stone-700 mb-1">
                 Preferences (comma-separated)
               </label>
               <input
+                id="constraint-preferences"
                 type="text"
                 value={preferences}
                 onChange={(e) => setPreferences(e.target.value)}
@@ -333,10 +338,11 @@ export function PlanHeader({
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+              <label htmlFor="constraint-accessibility" className="block text-[11px] font-semibold text-stone-700 mb-1">
                 Accessibility Needs
               </label>
               <input
+                id="constraint-accessibility"
                 type="text"
                 value={accessibility}
                 onChange={(e) => setAccessibility(e.target.value)}
@@ -345,10 +351,11 @@ export function PlanHeader({
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+              <label htmlFor="constraint-dietary" className="block text-[11px] font-semibold text-stone-700 mb-1">
                 Dietary Needs
               </label>
               <input
+                id="constraint-dietary"
                 type="text"
                 value={dietary}
                 onChange={(e) => setDietary(e.target.value)}

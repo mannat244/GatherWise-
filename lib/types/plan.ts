@@ -121,7 +121,7 @@ export const PlanningTaskSchema = z.object({
   costBasis: PriceBasisSchema.default("per_event"),
   currency: z.string().default("INR"),
   dependsOn: z.array(z.string()).default([]),
-  options: z.array(PlanningOptionSchema).default([]),
+  options: z.array(PlanningOptionSchema).max(50).default([]),
   selectedOptionId: z.string().optional(),
   userEdited: z.boolean().default(false),
   provenance: z.array(ProvenanceSchema).default([]),
@@ -153,7 +153,7 @@ export const EventPlanSchema = z.object({
   location: z.string().optional(),
   guestCount: z.number().int().positive().optional(),
   constraints: PlanConstraintsSchema.default({ currency: "INR", contingencyPercent: 10 }),
-  tasks: z.array(PlanningTaskSchema).default([]),
+  tasks: z.array(PlanningTaskSchema).max(50).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -257,7 +257,7 @@ export const AgentActionSchema = z.discriminatedUnion("type", [
     type: z.literal("propose_options"),
     taskId: z.string().optional(),
     taskType: TaskTypeSchema.optional(),
-    options: z.array(ProposedOptionSchema),
+    options: z.array(ProposedOptionSchema).max(25),
   }),
   z.object({
     type: z.literal("select_option"),
@@ -272,9 +272,9 @@ export const AgentActionSchema = z.discriminatedUnion("type", [
       guestCount: z.number().int().positive().optional(),
       date: z.string().optional(),
       location: z.string().optional(),
-      dietaryNeeds: z.array(z.string()).optional(),
-      accessibilityNeeds: z.array(z.string()).optional(),
-      preferences: z.array(z.string()).optional(),
+      dietaryNeeds: z.array(z.string()).max(20).optional(),
+      accessibilityNeeds: z.array(z.string()).max(20).optional(),
+      preferences: z.array(z.string()).max(20).optional(),
     }),
   }),
   z.object({
@@ -288,9 +288,9 @@ export const AgentProposalSchema = z.object({
   assistantMessage: z.string(),
   intent: z.enum(["clarify", "plan", "search", "compare", "select", "edit", "explain"]),
   followUpQuestion: z.string().optional(),
-  suggestedAnswers: z.array(z.string()).optional(),
-  actions: z.array(AgentActionSchema).default([]),
-  sourceNotes: z.array(z.string()).default([]),
+  suggestedAnswers: z.array(z.string()).max(10).optional(),
+  actions: z.array(AgentActionSchema).max(30).default([]),
+  sourceNotes: z.array(z.string()).max(20).default([]),
 });
 export type AgentProposal = z.infer<typeof AgentProposalSchema>;
 

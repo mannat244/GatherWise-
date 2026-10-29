@@ -163,7 +163,11 @@ export function ChatPanel({
 
       {/* Cooldown Active Alert Bar */}
       {cooldownSeconds > 0 && !isLoading && (
-        <div className="flex items-center justify-between bg-amber-50 border-t border-amber-200/80 px-3.5 py-2 text-[11px] text-amber-900 transition-all">
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-between bg-amber-50 border-t border-amber-200/80 px-3.5 py-2 text-[11px] text-amber-900 transition-all"
+        >
           <div className="flex items-center gap-1.5 font-medium">
             <Clock className="h-3.5 w-3.5 text-amber-600 animate-spin" />
             <span>Rate limit cooldown active (15 RPM Free Tier pacing)</span>
@@ -176,7 +180,11 @@ export function ChatPanel({
 
       {/* Daily Quota Reached Alert */}
       {dailyUsage?.isLimitReached && (
-        <div className="flex items-start gap-2 bg-rose-50 border-t border-rose-200 p-3 text-xs text-rose-800">
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="flex items-start gap-2 bg-rose-50 border-t border-rose-200 p-3 text-xs text-rose-800"
+        >
           <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
           <div>
             <p className="font-bold">Daily Free Tier Quota Reached (500/500 Requests)</p>
@@ -191,6 +199,8 @@ export function ChatPanel({
       <form onSubmit={handleSubmit} className="border-t border-stone-200 bg-white p-3">
         <div className="relative flex items-center">
           <input
+            id="chat-input-message"
+            aria-label="Event planning prompt or reply"
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}

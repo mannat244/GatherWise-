@@ -122,7 +122,7 @@ GatherWise bridges the gap between conversational AI and structured planning. In
 - **Rate Limit & Quota Protection**: Client & server 4s message cooldown pacing (15 RPM) and 500 RPD daily request counter
 - **AI Observability**: Live token telemetry (prompt, candidate, grounding search tokens), round-trip latency, and transparent `null`/`unmeasured` status handling
 - **Validation**: Zod (runtime validation on all API requests, responses, and localStorage state)
-- **Testing**: Vitest (50 automated unit and integration tests across 9 suites)
+- **Testing**: Vitest (64 automated unit and integration tests across 12 suites)
 - **Icons**: Lucide React
 
 ---
@@ -168,7 +168,7 @@ Executes `tsc --noEmit` to verify type safety across all components, API routes,
 ```bash
 pnpm test
 ```
-Executes all **59 automated unit and integration tests across 11 test suites** verifying:
+Executes all **64 automated unit and integration tests across 12 test suites** verifying:
 - Deterministic budget calculations & per-person scaling
 - Task state machine transitions & provenance preservation on proposal updates
 - Option-level grounding source matching & honest estimate fallbacks (never marking options verified merely from URLs)
@@ -223,7 +223,7 @@ Follow this sequence to evaluate the complete end-to-end user journey:
 - **Repository Size**: ~274 KiB (verified with `git count-objects -vH`, strictly under the 10 MB limit).
 - **Security & Secret Protection**: All Gemini API calls run server-side via Next.js Route Handlers. `.env.local` is ignored and zero credentials are committed to Git. Cooldown bypass is locked in production, and client identifiers are derived securely from server headers.
 - **Strict Code Quality & Boundaries**: Decoupled domain engines (`lib/planning/`) from UI components and API handlers. Schema-validated action application with zero unsafe `any` assertions in core paths.
-- **Test Coverage**: 59 tests passing across 11 test suites (`pnpm test`).
+- **Test Coverage**: 64 tests passing across 12 test suites (`pnpm test`).
 - **Reproducible Build**: Clean compilation with `tsc --noEmit` and `next build`.
 
 ---

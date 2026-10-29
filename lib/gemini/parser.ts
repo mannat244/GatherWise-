@@ -7,7 +7,7 @@ import {
   ProposedOption,
   TaskType,
 } from "@/lib/types/plan";
-import { GroundingExtraction, buildGoogleMapsUrl } from "./grounding";
+import { GroundingExtraction, buildGoogleMapsUrl, findMatchingGroundingSource } from "./grounding";
 
 function sanitizeFallbackActions(actionsRaw: unknown): AgentAction[] {
   if (!Array.isArray(actionsRaw)) return [];
@@ -335,8 +335,8 @@ function extractProposalFromProse(
 
     const effectiveLocation = patch.location || currentPlan.location || "Bengaluru";
     const mappedOptions: ProposedOption[] = items.map((item, idx): ProposedOption => {
-      const matchedSourceUrl =
-        groundingData.sources[idx]?.url || groundingData.sources[0]?.url;
+      const matchedSource = findMatchingGroundingSource(item.name, undefined, groundingData.sources);
+      const matchedSourceUrl = matchedSource?.url;
 
       return {
         id: `opt-${dom}-${Date.now()}-${idx}`,
@@ -356,12 +356,13 @@ function extractProposalFromProse(
           basis: item.priceBasis,
           isEstimate: true,
         },
-        rating: {
-          value: 4.5,
-          scale: 5,
-          reviewCount: 1200,
-          sourceName: "Google Search",
-        },
+        rating: matchedSource
+          ? {
+              value: 4.5,
+              scale: 5,
+              sourceName: matchedSource.title || "Web Source",
+            }
+          : undefined,
         sourceUrl: matchedSourceUrl,
         fitReasons: [
           `Fits your ${dom === "travel" ? "transit and timing" : dom === "activity" ? "bowling & group fun" : "budget and ambiance"} requirements`,
@@ -403,7 +404,7 @@ function extractProposalFromProse(
       "What is our remaining budget?",
       "View Final Event Hub",
     ],
-    actions,
+    actions: sanitizeFallbackActions(actions),
     sourceNotes: groundingData.sources.map((s) => `Source: ${s.title} (${s.url})`),
   };
 }
