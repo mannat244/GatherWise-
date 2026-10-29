@@ -18,6 +18,7 @@ import { parseModelResponseIntelligently } from "@/lib/gemini/parser";
 import { checkCooldownRateLimit } from "@/lib/rate-limit/cooldown";
 import { generateOfflineProposal } from "@/lib/planning/offline-copilot";
 import { applyProposalActions } from "@/lib/planning/proposal-actions";
+import { calculateTokenCost } from "@/lib/observability/cost-calculator";
 
 const ChatRequestSchema = z.object({
   messages: z
@@ -222,9 +223,22 @@ export async function POST(req: NextRequest) {
             typeof usage.toolUsePromptTokenCount === "number" ? usage.toolUsePromptTokenCount : 0;
           telemetry.totalTokens =
             usage.totalTokenCount ?? (telemetry.promptTokens + telemetry.candidateTokens + telemetry.toolTokens);
-          // Cost estimate for gemini-flash-lite ($0.075 / 1M input, $0.30 / 1M output)
-          telemetry.estimatedCostUsd =
-            (telemetry.promptTokens * 0.075 + telemetry.candidateTokens * 0.3) / 1_000_000;
+
+          const configuredTier = (process.env.GEMINI_BILLING_TIER === "paid" ? "paid" : "free") as "free" | "paid";
+          const costResult = calculateTokenCost({
+            model: DEFAULT_GEMINI_MODEL,
+            promptTokens: telemetry.promptTokens,
+            candidateTokens: telemetry.candidateTokens,
+            searchGroundingFired: groundingData.isGrounded,
+            tier: configuredTier,
+          });
+
+          telemetry.estimatedCostUsd = costResult.estimatedCostUsd;
+          telemetry.costEstimationBasis = costResult.pricingBasis;
+        } else {
+          telemetry.usageAvailable = false;
+          telemetry.estimatedCostUsd = null;
+          telemetry.costEstimationBasis = "Usage metadata not observed from model response";
         }
         telemetry.latencyMs = latency;
         telemetry.searchGroundingFired = groundingData.isGrounded;

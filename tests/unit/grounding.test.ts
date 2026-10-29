@@ -71,7 +71,7 @@ describe("Grounding Adapter", () => {
         },
       },
       "Koramangala Bengaluru",
-      "https://example.com/dyu-cafe"
+      { title: "Dyu Art Cafe Official", url: "https://example.com/dyu-cafe" }
     );
 
     expect(normalized.name).toBe("Dyu Art Cafe");
@@ -79,6 +79,21 @@ describe("Grounding Adapter", () => {
     expect(normalized.location?.directionsUrl).toBeDefined();
     expect(normalized.provenance[0].kind).toBe("verified_source");
     expect(normalized.provenance[0].sourceUrl).toBe("https://example.com/dyu-cafe");
+  });
+
+  it("does NOT mark an option as verified just because it has an arbitrary URL string", () => {
+    const ungroundedWithUrl = normalizeGroundedOption(
+      {
+        name: "Unverified Cafe",
+        description: "Random cafe with unverified link",
+        sourceUrl: "https://random-blog.com/cafe-mention",
+      },
+      "Bengaluru"
+    );
+
+    expect(ungroundedWithUrl.name).toBe("Unverified Cafe");
+    expect(ungroundedWithUrl.provenance[0].kind).toBe("estimate");
+    expect(ungroundedWithUrl.provenance[0].note).toContain("live verification pending");
   });
 
   it("labels option provenance as estimate when no verified search source matches", () => {

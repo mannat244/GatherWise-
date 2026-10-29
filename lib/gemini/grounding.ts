@@ -94,11 +94,25 @@ export function normalizeGroundedOption(
   contextLocation?: string,
   sourceOrUrl?: string | GroundingSource
 ): PlanningOption {
-  const matchedSource = typeof sourceOrUrl === "object" ? sourceOrUrl : undefined;
-  const directUrl = typeof sourceOrUrl === "string" ? sourceOrUrl : matchedSource?.url;
+  // 1. If rawOption is already a normalized PlanningOption with provenance, preserve it completely!
+  if ("provenance" in rawOption && Array.isArray((rawOption as any).provenance) && (rawOption as any).provenance.length > 0) {
+    const existing = rawOption as PlanningOption;
+    return {
+      ...existing,
+      location: {
+        ...existing.location,
+        directionsUrl: existing.location?.directionsUrl || buildGoogleMapsUrl(existing.name, existing.location?.address || contextLocation),
+      },
+      price: existing.price ? { ...existing.price, isEstimate: true } : undefined,
+    };
+  }
 
-  const isVerified = Boolean(matchedSource || (directUrl && directUrl !== "https://www.google.com"));
-  const finalSourceUrl = directUrl || rawOption.sourceUrl || "https://www.google.com";
+  const matchedSource = typeof sourceOrUrl === "object" ? sourceOrUrl : undefined;
+
+  // An option is strictly verified ONLY if backed by an authoritative matched GroundingSource
+  // Never mark an option as verified just because it has an arbitrary URL string!
+  const isVerified = Boolean(matchedSource && matchedSource.url);
+  const finalSourceUrl = matchedSource?.url || (typeof sourceOrUrl === "string" ? sourceOrUrl : rawOption.sourceUrl) || "https://www.google.com";
   const sourceName = matchedSource?.title || (isVerified ? "Google Search Grounding" : "AI Estimate");
 
   const provenance: Provenance[] = [
@@ -135,7 +149,7 @@ export function normalizeGroundedOption(
           currency: rawOption.price.currency || "INR",
           unit: rawOption.price.unit,
           basis: rawOption.price.basis || "per_event",
-          isEstimate: rawOption.price.isEstimate ?? true,
+          isEstimate: true, // Unsupported prices must remain explicitly unverified estimates
         }
       : undefined,
     rating:
@@ -144,7 +158,7 @@ export function normalizeGroundedOption(
             value: Math.min(5, Math.max(0, rawOption.rating.value)),
             scale: rawOption.rating.scale || 5,
             reviewCount: rawOption.rating.reviewCount,
-            sourceName: rawOption.rating.sourceName || "Google",
+            sourceName: isVerified ? (matchedSource?.title || "Google Maps") : (rawOption.rating.sourceName || "AI Estimate (Unverified)"),
           }
         : undefined,
     sourceUrl: finalSourceUrl,
