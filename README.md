@@ -20,6 +20,54 @@ GatherWise bridges the gap between conversational AI and structured planning. In
 
 ---
 
+## 🎯 Chosen Vertical & Target Persona
+
+* **Vertical**: **Event Planning & Social Gathering Copilot** (Casual & Milestone Gatherings: Birthdays, Group Outings, Team Celebrations, Dinners, and Weekend Activities).
+* **Target Persona**: The **"Reluctant Group Organizer"** — someone coordinating friends or colleagues who needs to balance shifting guest counts, strict budgets, varied preferences, and transport logistics. Instead of drowning in endless chat text or filling out rigid forms, they need an intelligent copilot that turns ideas into a living, editable checklist with verified places and deterministic budget numbers.
+
+---
+
+## 💡 Approach and Logic
+
+1. **Dual-Surface Interface ("Conversation as Control, Checklist as Result")**:
+   Natural language conversation acts as the primary control surface. The copilot extracts entities, constraints, and tasks, projecting them into a real-time reactive workspace.
+2. **Deterministic Arithmetic Boundary**:
+   LLMs are notoriously prone to math errors and budget hallucinations. In GatherWise, **zero financial math is left to the AI**. All per-person costs, committed vs. estimated totals, contingency reserves, and overage detection are computed by pure TypeScript domain engines (`lib/planning/budget.ts`).
+3. **Constraint-Aware Replanning**:
+   Events are volatile. When constraints change (e.g., guest count jumps from 6 to 10 or budget drops), GatherWise re-evaluates the plan, updates estimates dynamically, and **strictly preserves completed tasks and user-finalized choices**.
+4. **Selective Google Search Grounding with Honest Provenance**:
+   Google Search Grounding is triggered only for external discovery requests to conserve quota. Every recommended place is matched specifically against candidate search sources by token and domain. Only matching options receive `verified_source`; ungrounded options remain honestly labeled as `estimate`.
+
+---
+
+## ⚙️ How the Solution Works
+
+1. **Brief Ingestion & Server Validation**:
+   The user inputs an event idea (e.g., *"Help me plan a birthday for 6 friends in Koramangala under ₹3,000"*). The Next.js Route Handler validates request bounds with Zod, checks the 4-second rate-limit cooldown, and derives client identity from trusted headers.
+2. **Selective Tool Gating & Directive Prompting**:
+   If external recommendations are needed, the Google Search tool is attached, and Gemini is commanded with a zero-stalling directive to query Google Search immediately. For local inquiries (budget questions, constraint removals), the search tool is skipped to save tokens.
+3. **Resilient Schema Parsing & Action Sanitization**:
+   The response is parsed by a robust parser. If full schema validation fails, fallback actions are individually sanitized against `AgentActionSchema.safeParse`, ensuring malformed model output never corrupts domain state.
+4. **Deterministic Domain Execution**:
+   Validated actions (`upsert_task`, `propose_options`, `propose_constraint_change`, `select_option`) are applied through pure domain modules (`proposal-actions.ts`, `change-impact.ts`), recalculating the budget deterministically.
+5. **Interactive Workspace & Final Event Hub**:
+   The user explores places with verified Google Maps links, selects choices, reviews token telemetry, and transitions to the **Final Event Hub** to view the auto-generated invitation, share via Web Share API, export as Markdown, or print to PDF.
+
+---
+
+## 📝 Assumptions Made
+
+1. **Free-Tier API Quota Baseline**:
+   The solution is architected around the `gemini-3.5-flash-lite` Free Tier (15 RPM / 500 RPD). The system enforces a 4-second message cooldown pacing and client daily quota tracking to prevent rate-limit 429 exhaustion.
+2. **Planning Copilot vs. Transactional Booking**:
+   GatherWise coordinates decisions, budgets, and recommendations. It does not process monetary payments or place automated table holds; prices discovered from search snippets are treated as estimates (`isEstimate: true`), and direct official links are provided for manual booking.
+3. **Local-First Privacy Architecture**:
+   Event plans and chat histories are stored entirely client-side in browser `localStorage` using a versioned schema (`v1`), ensuring zero server-side user data retention.
+4. **Offline Resilience & Sample Mode**:
+   If no `GEMINI_API_KEY` is provided, GatherWise gracefully operates in a deterministic Sample Mode, clearly labeled as unverified sample data so evaluators can test the complete UI and export flow without API setup.
+
+---
+
 ## 🏗️ Architecture & Technology Stack
 
 ```text
